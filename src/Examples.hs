@@ -2,7 +2,7 @@ module Examples where
 
 import Interpreter
 import TypeCheck
-import Types
+import Term
 
 import Data.Either
 
@@ -12,5 +12,11 @@ id' = Lam (toEnum 0, Ty) (Lam (toEnum 1, Var (toEnum 0)) (Var (toEnum 1)))
 idTy :: Term Int
 idTy = fromRight undefined (typeCheck [] id')
 
-appId :: Term Int
-appId = (id' `App` idTy) `App` id'
+unsafeGetType :: (Eq v, Show v, Enum v) => Term v -> Term v
+unsafeGetType = fromRight undefined . typeCheck []
+
+appId :: (Eq v, Show v, Enum v) => Term v -> Term v
+appId t = (id' `App` unsafeGetType t) `App` t
+
+appIdId :: Term Int
+appIdId = appId id'

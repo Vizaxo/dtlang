@@ -4,7 +4,7 @@ import Test.Generators
 
 import Examples
 import TypeCheck
-import Types
+import Term
 
 import Data.Either
 import Test.QuickCheck
@@ -15,5 +15,11 @@ testGenWellTyped
 
 testIdPreservesType
   = forAll genWellTyped $
-    \prog -> let (Right progT) = typeCheck [] prog
-             in Right progT === typeCheck [] ((id' `App` progT) `App` prog)
+    \prog -> let progT = typeCheck [] prog
+             --in Right progT === typeCheck [] ((id' `App` progT) `App` prog)
+             in progT === typeCheck [] (appId prog)
+
+prop_idPreservesType :: Term Int -> Property
+prop_idPreservesType term =
+  wellTyped term ==> let termT = typeCheck [] term
+                     in termT === typeCheck [] (appId term)

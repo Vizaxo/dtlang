@@ -5,7 +5,7 @@ import Test.Generators
 import Examples
 import Interpreter
 import TypeCheck
-import Types
+import Term
 
 import Data.Either
 import Test.QuickCheck

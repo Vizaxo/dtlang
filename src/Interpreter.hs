@@ -1,7 +1,6 @@
 module Interpreter where
 
-import TypeCheck
-import Types
+import Term
 
 -- | Interpret an expression.
 --   If the expression is well-typed this should return a Right.
@@ -17,5 +16,4 @@ interpret term = return term
 
 apply :: (Eq v, Show v) => Term v -> Term v -> Either String (Term v)
 apply (Lam (x,_) body) arg = return $ subst x arg body
-apply (Pi (x,_) ret) arg = return $ subst x arg ret --Applying a pi type? Does this make sense?
 apply t _ = Left $ "Trying to apply the non-function term " <> show t

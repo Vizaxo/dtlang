@@ -30,7 +30,8 @@ library
   exposed-modules:     Examples
                      , Interpreter
                      , TypeCheck
-                     , Types
+                     , Term
+                     , Utils
 
 test-suite Test
   type:                exitcode-stdio-1.0

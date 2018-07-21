@@ -1,10 +1,11 @@
 module TypeCheck where
 
-import Types
+import Term
 
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Either
+import Data.List
 
 -- | A map from variables to their types
 type Context v = [(v, Term v)]
@@ -36,20 +37,29 @@ typeCheck gamma (App a b) =
       return (subst x b ret)
     _ -> Left "Trying to apply a non-function type."
 typeCheck gamma Ty = Right Ty
+typeCheck gamma (Let NoRec bindings body) = do
+  --Type-check the bindings without any of the bindings in scope
+  sequence $ typeCheckBinding gamma <$> bindings
+  let gamma' = (fst <$> bindings) ++ gamma
+  typeCheck gamma' body
+typeCheck gamma (Let Rec bindings body) = do
+  let gamma' = (fst <$> bindings) ++ gamma
+  --Type-check the bindings with the bindings recursively in scope
+  sequence $ typeCheckBinding gamma' <$> bindings
+  typeCheck gamma' body >>= \case
+    Ty -> throwError "letrec in a type"
+    (Var v) -> case lookup v gamma' of
+      Just t -> case t of
+        Ty -> throwError "letrec in a type"
+        _ -> return t
+      Nothing -> throwError $ "Variable not in scope: " <> show v
+    t -> return t
 
---subst for with in
-subst :: Eq v => v -> Term v -> Term v -> Term v
-subst v with (Var u) | v == u    = with
-                     | otherwise = Var u
-subst v with lam@(Lam (u,uTy) body)
-  | v /= u = Lam (u,(subst v with uTy)) (subst v with body)
-  | otherwise = lam
-subst v with pi@(Pi (u,uTy) ret)
-  | v /= u = Pi (u,(subst v with uTy)) (subst v with ret)
-  | otherwise = pi
-subst v with (App a b) = App (subst v with a) (subst v with b)
-subst v with Ty = Ty
+typeCheckBinding gamma ((x,xTy),val) = do
+  ty <- typeCheck gamma val
+  unify xTy ty
 
+-- TODO: actually set unification constraints
 type Unification v = StateT [(v, Term v)] (Either String)
 
 lookupEnv :: Eq v => v -> Unification v (Maybe (Term v))
@@ -82,12 +92,24 @@ unify' (App a b) (App x y) = do
   unify' a x
   unify' b y
 unify' Ty Ty = return ()
-unify' _ _ = mzero
-{-
-unify (Let [] a) b = unify a b
-unify a (Let [] b) = unify a b
-unify (Let (x:xs) a) (Let ys b) = unify (Let xs (inline x a) ) (Let ys b)
-unify (Let xs a) (Let (y:ys) b) = unify (Let xs a) (Let ys (inline y b))
--}
+unify' (Let _ [] a) b = unify' a b
+unify' a (Let _ [] b) = unify' a b
+unify' a@(Let Rec _ _) b@(Let _ _ _) = throwError "Trying to unify a letrec"
+unify' a@(Let _ _ _) b@(Let Rec _ _) = throwError "Trying to unify a letrec"
+unify' a@(Let NoRec _ _) b@(Let NoRec _ _) = unify' (inlineLet a) (inlineLet b)
+unify' a b = lift . Left $ "Could not unify " <> show a <> " and " <> show b
 --TODO: case
 
+inlineLet :: Eq v => Term v -> Term v
+inlineLet (Let NoRec [] body) = body
+inlineLet (Let noRec xs body) = foldr inline body xs
+  where inline ((x,_),val) body = subst x val body
+        isRec ((x,_),val) = elem x (freeVars val)
+
+freeVars :: Eq v => Term v -> [v]
+freeVars (Var v) = [v]
+freeVars (Lam (v,_) body) = freeVars body \\ [v]
+freeVars (Pi (v,_) ret) = freeVars ret \\ [v]
+freeVars (App a b) = freeVars a ++ freeVars b
+freeVars Ty = []
+freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
