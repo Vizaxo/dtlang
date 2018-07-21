@@ -18,9 +18,12 @@ typeCheck gamma (Var v) =
     Just ty -> Right ty
 typeCheck gamma (Lam x body) = Pi x <$> typeCheck (x:gamma) body
 typeCheck gamma (Pi (x,xTy) ret) = do
-  (Ty n) <- typeCheck gamma xTy
-  (Ty n) <- typeCheck ((x,xTy):gamma) ret
-  return $ Ty n --TODO: check universes
+  typeCheck gamma xTy >>= \case
+    (Ty n) -> do
+       typeCheck ((x,xTy):gamma) ret >>= \case
+         (Ty n) -> return $ Ty n --TODO: check universes
+         t      -> Left $ "Expected type (Ty n), got type " <> show t
+    t -> Left $ "Expected type (Ty n), got type " <> show t
 typeCheck gamma (App a b) = do
   typeCheck gamma a >>= \case
     Pi (x,xTy) ret -> do
