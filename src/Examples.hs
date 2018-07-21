@@ -1,5 +1,6 @@
 module Examples where
 
+import Interpreter
 import TypeCheck
 import Types
 
