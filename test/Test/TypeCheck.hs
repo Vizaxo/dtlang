@@ -19,7 +19,7 @@ testIdPreservesType
              --in Right progT === typeCheck [] ((id' `App` progT) `App` prog)
              in progT === typeCheck [] (appId prog)
 
-prop_idPreservesType :: Term Int -> Property
-prop_idPreservesType term =
+prop_idPreservesType :: WellTyped Int -> Property
+prop_idPreservesType (WellTyped term) =
   wellTyped term ==> let termT = typeCheck [] term
                      in termT === typeCheck [] (appId term)
