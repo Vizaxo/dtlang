@@ -6,8 +6,8 @@ import Types
 
 import Data.Either
 
-id' :: Term Int
-id' = Lam (0, Ty) (Lam (1, Var 0) (Var 1))
+id' :: Enum v => Term v
+id' = Lam (toEnum 0, Ty) (Lam (toEnum 1, Var (toEnum 0)) (Var (toEnum 1)))
 
 idTy :: Term Int
 idTy = fromRight undefined (typeCheck [] id')

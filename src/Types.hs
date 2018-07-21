@@ -27,3 +27,10 @@ data Term v = Var v                              --Variable
             | Case (Term v) [CaseTerm v]         --Case expr of terms
             deriving (Eq, Show)
 type CaseTerm v = (Constructor v, [Binding v], (Term v))
+
+maxNesting :: Term v -> Int
+maxNesting (Var v) = 0
+maxNesting (Lam _ t) = maxNesting t + 1
+maxNesting (Pi _ t) = maxNesting t + 1
+maxNesting (App a b) = max (maxNesting a) (maxNesting b)
+maxNesting Ty = 0

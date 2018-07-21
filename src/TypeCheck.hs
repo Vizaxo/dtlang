@@ -74,10 +74,10 @@ unify' x (Var u) =
     Just u' -> unify' x u'
 unify' (Lam (x,xTy) a) (Lam (y,yTy) b)
   | x == y = unify' xTy yTy >> unify' a b
-  | otherwise = error $ "unify' " <> show x <> " and " <> show y
+  | otherwise = lift . Left $ "unify' " <> show x <> " and " <> show y --TODO: eta-substitution
 unify' (Pi (x,xTy) a) (Pi (y,yTy) b)
   | x == y = unify' xTy yTy >> unify' a b
-  | otherwise = error $ "unify' " <> show x <> " and " <> show y
+  | otherwise = lift . Left $ "unify' " <> show x <> " and " <> show y --TODO: eta-substitution
 unify' (App a b) (App x y) = do
   unify' a x
   unify' b y

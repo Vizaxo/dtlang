@@ -7,9 +7,14 @@ import Interpreter
 import TypeCheck
 import Types
 
+import Data.Either
 import Test.QuickCheck
 
 testIdReturnsArg
-  = forAll (genWellTyped genVInt) $
+  = forAll genWellTyped $
   \prog -> let (Right progT) = typeCheck [] prog
            in (Right prog) === interpret ((id' `App` progT) `App` prog)
+
+testWellTypedInterpretsRight
+  = forAll genWellTyped $
+  \prog -> isRight $ interpret prog

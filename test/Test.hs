@@ -10,3 +10,4 @@ main = do
   quickCheck testGenWellTyped
   quickCheck testIdPreservesType
   quickCheck testIdReturnsArg
+  quickCheck testWellTypedInterpretsRight

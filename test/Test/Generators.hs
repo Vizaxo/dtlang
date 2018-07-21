@@ -3,42 +3,77 @@ module Test.Generators where
 import TypeCheck
 import Types
 
+import Control.Monad.State
 import Test.QuickCheck
 
-genVar :: Gen v -> Gen (Term v)
-genVar = fmap Var
+type CustomGen v a = StateT (v, v) (StateT Int Gen) a
+type TermGen v = CustomGen v (Term v)
 
-genBinding :: Gen v -> Gen (Binding v)
-genBinding genV = (,) <$> genV <*> genTerm genV
+genVar :: Enum v => TermGen v
+genVar = Var <$> genExistingVar
 
-genLam :: Gen v -> Gen (Term v)
-genLam genV = Lam <$> genBinding genV <*> genTerm genV
+genExistingVar :: Enum v => CustomGen v v
+genExistingVar = do
+  (v0, vmax) <- get
+  lift $ lift $ elements [v0..pred vmax]
 
-genPi :: Gen v -> Gen (Term v)
-genPi genV = Pi <$> genBinding genV <*> genTerm genV
 
-genApp :: Gen v -> Gen (Term v)
-genApp genV = App <$> genTerm genV <*> genTerm genV
+genNewBinding :: Enum v => CustomGen v (Binding v)
+genNewBinding= do
+  (v0, v) <- get
+  ty <- genTerm
+  put $ (v0, succ v)
+  return (v, ty)
+
+genLam :: Enum v => TermGen v
+genLam = Lam <$> genNewBinding <*> genTerm
+
+genPi :: Enum v => TermGen v
+genPi = Pi <$> genNewBinding <*> genTerm
+
+genApp :: Enum v => TermGen v
+genApp = App <$> genTerm <*> genTerm
 
 halving :: Integral a => a -> [a]
 halving 0 = [0]
 halving start = start:halving(start `div` 2)
 
-genTy :: Gen (Term v)
+genTy :: TermGen v
 genTy = return Ty
 
+--TODO: handle state passing better
+freq :: [(Int, CustomGen v a)] -> CustomGen v a
+freq gens = do
+  nesting <- lift get
+  v <- get
+  let evalCustomGen = evalStateT' (nesting - 1) . evalStateT' v
+  lift . lift . frequency $ fmap (fmap evalCustomGen) gens
+
+evalStateT' :: Monad m => s -> StateT s m a -> m a
+evalStateT' = flip evalStateT
+
 --TODO: generate only in-scope variables
---TODO: tweak these values
-genTerm :: Gen v -> Gen (Term v)
-genTerm genV = frequency $ fmap (fmap ($ genV)) [ (5, genVar)
-                                                , (2, genLam)
-                                                , (2, genPi)
-                                                , (5, genApp)
-                                                , (4, const genTy)
-                                                ]
+--TODO: make sure samples contain a healthy mix of all constructors.
+--    Specifically, App seems very rare.
+genTerm :: Enum v => TermGen v
+genTerm = do
+  nesting <- lift get
+  (v0, v) <- get
+  let vFreq = if fromEnum v0 == fromEnum v then const 0 else id
+  freq [ (vFreq 5, genVar)
+     , (nesting*10, genLam)
+     , (nesting*5, genPi)
+     , (nesting*10, genApp)
+     , (1, genTy)
+     ]
 
-genVInt :: Gen Int
-genVInt = elements [0..9]
+generateTerm :: Enum v => Int -> v -> Gen (Term v)
+generateTerm nesting v0 = fmap fst $ flip runStateT nesting $ fst <$> runStateT genTerm (v0, v0)
 
-genWellTyped :: (Eq v, Show v) => Gen v -> Gen (Term v)
-genWellTyped genV = genTerm genV `suchThat` wellTyped
+-- | Generate a random well-typed term. It will have a maximum nesting
+--  level of 'nesting', and the variables will be genereated starting
+--  from 'v0'.
+genWellTyped' :: (Eq v, Show v, Enum v) => v -> Int -> Gen (Term v)
+genWellTyped' v0 nesting = generateTerm nesting v0 `suchThat` \t -> wellTyped t && maxNesting t == nesting
+
+genWellTyped = oneof $ genWellTyped' 'a' <$> [0..3]
