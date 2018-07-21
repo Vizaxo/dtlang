@@ -25,5 +25,7 @@ library
   default-extensions:  LambdaCase
   build-depends:       base >= 4.7 && < 5
                      , mtl
-  exposed-modules:     TypeCheck
+                     , QuickCheck
+  exposed-modules:     Examples
+                     , TypeCheck
                      , Types
