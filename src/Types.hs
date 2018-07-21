@@ -22,7 +22,7 @@ data Term v = Var v                              --Variable
             | Lam (Binding v) (Term v)           --Lambda var body
             | Pi (Binding v) (Term v)            --Pi var return
             | App (Term v) (Term v)              --Application
-            | Ty Int                             --Type universes
+            | Ty                                 --Type:Type
             | Let [(Binding v, Term v)] (Term v) --Let bindings in body
             | Case (Term v) [CaseTerm v]         --Case expr of terms
             deriving (Eq, Show)

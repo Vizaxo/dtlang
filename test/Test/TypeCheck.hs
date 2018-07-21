@@ -26,11 +26,8 @@ halving :: Integral a => a -> [a]
 halving 0 = [0]
 halving start = start:halving(start `div` 2)
 
-genUniverse :: Gen Int
-genUniverse = frequency $ zip (halving 50) (fmap return [0..])
-
-genTy :: Gen v -> Gen (Term v)
-genTy genV = Ty <$> genUniverse
+genTy :: Gen (Term v)
+genTy = return Ty
 
 --TODO: generate only in-scope variables
 --TODO: tweak these values
@@ -39,7 +36,7 @@ genTerm genV = frequency $ fmap (fmap ($ genV)) [ (5, genVar)
                                                 , (2, genLam)
                                                 , (2, genPi)
                                                 , (5, genApp)
-                                                , (4, genTy)
+                                                , (4, const genTy)
                                                 ]
 
 genVInt :: Gen Int
