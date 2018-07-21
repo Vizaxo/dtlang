@@ -46,17 +46,21 @@ typeCheck gamma (Let Rec bindings body) = do
   let gamma' = (fst <$> bindings) ++ gamma
   --Type-check the bindings with the bindings recursively in scope
   sequence $ typeCheckBinding gamma' <$> bindings
-  typeCheck gamma' body >>= \case
-    Ty -> throwError "letrec in a type"
-    (Var v) -> case lookup v gamma' of
-      Just t -> case t of
-        Ty -> throwError "letrec in a type"
-        _ -> return t
-      Nothing -> throwError $ "Variable not in scope: " <> show v
-    t -> return t
+  notType gamma' body >>= (\t -> isType gamma t >> return t)
+
+notType gamma t = do
+  typeCheck gamma t >>= \case
+    Ty -> throwError $ "Expected something not a type, got " <> show t <> ":Type"
+    term -> return term
+
+isType gamma t = do
+  typeCheck gamma t >>= \case
+    Ty -> return ()
+    term -> throwError $ "Expected a type, got " <> show t <> ":" <> show term
 
 typeCheckBinding gamma ((x,xTy),val) = do
   ty <- typeCheck gamma val
+  isType gamma xTy
   unify xTy ty
 
 -- TODO: actually set unification constraints
