@@ -27,6 +27,7 @@ qcRegressionTests
     , Let Rec [(('a',Ty),Var 'a'),(('b',Lam ('b',Var 'a') (Var 'b')),Var 'b')] (Var 'b')
     , Let Rec [(('a',Lam ('a',Ty) (Var 'a')),Var 'b'),(('b',Var 'a'),Var 'b')] (Var 'a')
     , Let Rec [(('a',Ty),Var 'a'),(('b',Var 'a'),Var 'a'),(('c',Var 'a'),Var 'a')] (Var 'b')
+    , App (Lam ('a',Ty) (Var 'a')) Ty
     ]
 
 qcGenerated :: [Term Char]

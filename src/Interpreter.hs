@@ -10,8 +10,7 @@ interpret lam@(Lam _ _) = return lam
 interpret pi@(Pi _ _) = return pi
 interpret (App a b) = do
   a' <- interpret a
-  b' <- interpret b
-  apply a' b'
+  apply a' b
 interpret term = return term
 
 apply :: (Eq v, Show v) => Term v -> Term v -> Either String (Term v)
