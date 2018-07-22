@@ -1,17 +1,19 @@
 module TypeCheck where
 
 import Term
+import Utils
 
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Either
 import Data.List
+import Debug.Trace
 
 -- | A map from variables to their types
 type Context v = [(v, Term v)]
 
-wellTyped :: (Eq v, Show v) => Term v -> Bool
-wellTyped = isRight . typeCheck []
+wellTyped :: (Eq v, Show v) => Context v -> Term v -> Bool
+wellTyped = isRight .: typeCheck
 
 typeCheck :: forall v. (Eq v, Show v) => Context v -> Term v -> Either String (Term v)
 typeCheck gamma (Var v) =
@@ -57,6 +59,9 @@ isType gamma t = do
   typeCheck gamma t >>= \case
     Ty -> return ()
     term -> throwError $ "Expected a type, got " <> show t <> ":" <> show term
+
+isType' :: (Eq v, Show v, Enum v) => Context v -> Term v -> Bool
+isType' = isRight .: isType
 
 typeCheckBinding gamma ((x,xTy),val) = do
   ty <- typeCheck gamma val

@@ -21,5 +21,5 @@ testIdPreservesType
 
 prop_idPreservesType :: WellTyped Int -> Property
 prop_idPreservesType (WellTyped term) =
-  wellTyped term ==> let termT = typeCheck [] term
-                     in termT === typeCheck [] (appId term)
+  wellTyped [] term ==> let termT = typeCheck [] term
+                        in termT === typeCheck [] (appId term)
