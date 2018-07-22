@@ -1,8 +1,11 @@
 module Utils where
 
+-- | The `blackbird` combinator for composing a function of arity 2.
 infixr 5 .:
 (.:) = (.).(.)
 
+-- | Get the maximum value in a list, returning a default value if the
+--   list is empty.
 maximumOr :: (Ord a) => a -> [a] -> a
 maximumOr x [] = x
 maximumOr _ xs = maximum xs

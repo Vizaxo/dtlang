@@ -2,39 +2,49 @@ module Term where
 
 import Utils
 
-type Program v = ( [DataDecl v] --Data declarations
-                 , [TopLevel v] --Top-level definitions
+-- | A program is a list of data declarations, and top-level definitions.
+type Program v = ( [DataDecl v] -- ^Data declarations
+                 , [TopLevel v] -- ^Top-level definitions
                  )
 
-type DataDecl v = ( v                       --Datatype name
-                  , Term v                  --Type of the datatype
-                  , [(Constructor v, Term v)] --Constructor declarations
+-- | A data declaration has a name, a type, and a list of constructors.
+--   Each constructor has an associated type.
+type DataDecl v = ( v                         -- ^Datatype name
+                  , Term v                    -- ^Type of the datatype
+                  , [(Constructor v, Term v)] -- ^Constructor declarations
                   )
 
-type Constructor v = v
+-- | A constructor has a name, a tag, and an arity.
+type Constructor v = (v, Int, Int)
 
-type TopLevel v = ( v --Name
-                  , Term v    --Body
+-- | A top-level definition is a name and a body.
+type TopLevel v = ( v      -- ^Name
+                  , Term v -- ^Body
                   )
 
+-- | A binding of a variable to a type.
 type Binding v = (v, Term v)
 
 
-data Term v = Var v                              --Variable
-            | Lam (Binding v) (Term v)           --Lambda var body
-            | Pi (Binding v) (Term v)            --Pi var return
-            | App (Term v) (Term v)              --Application
-            | Ty                                 --Type:Type
-            | Let IsRec [(Binding v, Term v)] (Term v) --Let bindings in body
-            | Case (Term v) [CaseTerm v]         --Case expr of terms
+-- | The term datatype for the language, parameterised by the type of
+--   its variables.
+data Term v = Var v                              -- ^Variable
+            | Lam (Binding v) (Term v)           -- ^Lambda var body
+            | Pi (Binding v) (Term v)            -- ^Pi var return
+            | App (Term v) (Term v)              -- ^Application
+            | Ty                                 -- ^Type:Type
+            | Let IsRec [(Binding v, Term v)] (Term v) -- ^Let bindings in body
+            | Case (Term v) [CaseTerm v]         -- ^Case expr of terms
             deriving (Eq, Show)
 type CaseTerm v = (Constructor v, [Binding v], (Term v))
 
 infixl 3 `App`
 
+-- | Determines whether a let(rec) expression is a let or a letrec.
 data IsRec = Rec | NoRec
            deriving (Eq, Show)
 
+-- | Get the maximum nesting level of a term.
 maxNesting :: Term v -> Int
 maxNesting (Var v) = 0
 maxNesting (Lam _ t) = maxNesting t + 1
@@ -49,7 +59,8 @@ maxNesting (Let _ bindings body) = max (maxNesting body) bindNesting
 maxNesting (Case t branches) = max (maxNesting t) caseNesting
   where caseNesting = maximumOr 0 $ fmap (maxNesting . \(_,_,x)->x) branches
 
---subst for with in
+-- | Substitute all free occurances of the given variable for the
+--   second argument, in the third argument.
 subst :: Eq v => v -> Term v -> Term v -> Term v
 subst v with (Var u) | v == u    = with
                      | otherwise = Var u
@@ -66,6 +77,7 @@ subst v with lett@(Let rec bindings body)
   | otherwise = Let rec (substBindings <$> bindings) (subst v with body)
   where substBindings = \((u,uTy),val) -> ((u,subst v with uTy), subst v with val)
 
+-- | Pretty-print a term.
 prettyPrint :: Show v => Term v -> String
 prettyPrint (Var v) = show v
 prettyPrint (Lam (u,uTy) body) = "\\" <> show u <> ":" <> prettyPrint uTy <> ". (" <> prettyPrint body <> ")"

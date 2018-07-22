@@ -19,6 +19,7 @@ interpret term = return term
 interpretNF :: (Eq v, Show v) => Term v -> Either String (Term v)
 interpretNF = fixM interpret . return
 
+-- | Helper function to apply a lambda expression to an argument.
 apply :: (Eq v, Show v) => Term v -> Term v -> Either String (Term v)
 apply (Lam (x,_) body) arg = return $ subst x arg body
 apply t _ = Left $ "Trying to apply the non-function term " <> show t

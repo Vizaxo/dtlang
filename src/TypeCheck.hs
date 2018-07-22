@@ -9,12 +9,15 @@ import Data.Either
 import Data.List
 import Debug.Trace
 
--- | A map from variables to their types
+-- | A map from variables to their types.
 type Context v = [(v, Term v)]
 
+-- | Predicate of whether a given term is well-typed in the given context.
 wellTyped :: (Eq v, Show v, Enum v) => Context v -> Term v -> Bool
 wellTyped = isRight .: typeCheck
 
+-- | Check the type of a term in the given context. Returns the type
+--   if the term is well-typed, and gives an error otherwise.
 typeCheck :: forall v. (Eq v, Show v, Enum v) => Context v -> Term v -> Either String (Term v)
 typeCheck gamma (Var v) =
   case lookup v gamma of
@@ -51,22 +54,27 @@ typeCheck gamma (Let Rec bindings body) = do
   sequence $ typeCheckBinding gamma' <$> bindings
   notType gamma' body >>= (\t -> isType gamma t >> return t)
 
+-- | Helper function to substitute the bindings of a let expression into the body.
 substLet :: Eq v => [(Binding v, Term v)] -> Term v -> Term v
 substLet xs body = foldr (\((v,_),val) term -> subst v val term) body xs
 
+-- | Returns () if the given term is not a type; throws an error otherwise.
 notType gamma t = do
   typeCheck gamma t >>= \case
     Ty -> throwError $ "Expected something not a type, got " <> show t <> ":Type"
     term -> return term
 
+-- | Returns () if the given term is a type; throws an error otherwise.
 isType gamma t = do
   typeCheck gamma t >>= \case
     Ty -> return ()
     term -> throwError $ "Expected a type, got " <> show t <> ":" <> show term
 
+-- | Predicate of whether the given term is a type or not.
 isType' :: (Eq v, Show v, Enum v) => Context v -> Term v -> Bool
 isType' = isRight .: isType
 
+-- | Helper function to type-check a single let binding.
 typeCheckBinding gamma ((x,xTy),val) = do
   ty <- typeCheck gamma val
   isType gamma xTy
@@ -83,6 +91,8 @@ insertEnv v x = do
   env <- get
   put ((v,x):env)
 
+-- | Unify two terms. Returns () if they can be unified, and throws an
+--   error if they can't.
 unify a b = fmap fst $ flip runStateT [] $ unify' a b
 
 unify' :: (Eq v, Show v, Enum v) => Term v -> Term v -> Unification v ()
@@ -136,18 +146,21 @@ alpha old new (Let rec xs body) = Let rec (alphaBinds <$> xs) (alpha old new bod
                                  where vTy' = alpha old new vTy'
                                        val' =  alpha old new val
 
+-- | Generate a fresh variable that isn't used in either of the given terms.
 freshVar :: (Eq v, Enum v) => Term v -> Term v -> v
 freshVar a b = toEnum $ (+1) $ maximum $ fmap fromEnum $ allVars a ++ allVars b
 
+-- | Inline a non-recursive let expression.
 inlineLet :: Eq v => Term v -> Term v
 inlineLet (Let NoRec [] body) = body
-inlineLet (Let noRec xs body) = foldr inline body xs
+inlineLet (Let NoRec xs body) = foldr inline body xs
   where inline ((x,_),val) body = subst x val body
-        isRec ((x,_),val) = elem x (freeVars val)
 
+-- | Get a list of all the bound and free variables in a term.
 allVars :: Eq v => Term v -> [v]
 allVars t = freeVars t ++ boundVars t
 
+-- | Get a list of all the free variables in a term.
 freeVars :: Eq v => Term v -> [v]
 freeVars (Var v) = [v]
 freeVars (Lam (v,_) body) = freeVars body \\ [v]
@@ -156,6 +169,7 @@ freeVars (App a b) = freeVars a ++ freeVars b
 freeVars Ty = []
 freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
 
+-- | Get a list of all the bound variables in a term.
 boundVars :: Eq v => Term v -> [v]
 boundVars (Var v) = []
 boundVars (Lam (v,_) body) = v:boundVars body
