@@ -30,6 +30,8 @@ data Term v = Var v                              --Variable
             deriving (Eq, Show)
 type CaseTerm v = (Constructor v, [Binding v], (Term v))
 
+infixl 3 `App`
+
 data IsRec = Rec | NoRec
            deriving (Eq, Show)
 

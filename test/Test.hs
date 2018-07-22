@@ -11,10 +11,14 @@ main :: IO ()
 main = do
   quickCheck (prop_idReturnsArg @Int)
   quickCheck (prop_wellTypedInterpretsRight @Int)
+  quickCheck (prop_pairFstReturnsArg @Int)
+  quickCheck (prop_pairSndReturnsArg @Int)
   quickCheck (prop_etaExpansion @Int)
 
   quickCheck (prop_genWellTyped @Int)
   quickCheck (prop_idPreservesType @Int)
+  quickCheck (prop_pairFstPreservesType @Int)
+  quickCheck (prop_pairSndPreservesType @Int)
   quickCheck (prop_etaExpansionType @Int)
 
 

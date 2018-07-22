@@ -17,6 +17,16 @@ prop_idPreservesType (WellTyped term) =
   wellTyped [] term ==> let termT = typeCheck [] term
                         in termT === typeCheck [] (appId term)
 
+prop_pairFstPreservesType :: (Eq v, Show v, Enum v) => WellTyped v -> Property
+prop_pairFstPreservesType (WellTyped term) =
+  wellTyped [] term ==> let (Right termT) = typeCheck [] term
+                        in Right termT === typeCheck [] (pair `App` termT `App` term `App` term `App` (fst' `App` termT))
+
+prop_pairSndPreservesType :: (Eq v, Show v, Enum v) => WellTyped v -> Property
+prop_pairSndPreservesType (WellTyped term) =
+  wellTyped [] term ==> let (Right termT) = typeCheck [] term
+                        in Right termT === typeCheck [] (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
+
 prop_etaExpansionType :: (Eq v, Show v, Enum v) => v -> WellTyped v -> WellTyped v -> Property
 prop_etaExpansionType v (WellTyped term) (WellTyped arg)
   = typeCheck [] term === typeCheck [] (App (Lam binding term) arg)
