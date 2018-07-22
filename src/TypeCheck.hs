@@ -43,12 +43,16 @@ typeCheck gamma (Let NoRec bindings body) = do
   --Type-check the bindings without any of the bindings in scope
   sequence $ typeCheckBinding gamma <$> bindings
   let gamma' = (fst <$> bindings) ++ gamma
-  typeCheck gamma' body
+  let body' = substLet bindings body
+  typeCheck gamma' body'
 typeCheck gamma (Let Rec bindings body) = do
   let gamma' = (fst <$> bindings) ++ gamma
   --Type-check the bindings with the bindings recursively in scope
   sequence $ typeCheckBinding gamma' <$> bindings
   notType gamma' body >>= (\t -> isType gamma t >> return t)
+
+substLet :: Eq v => [(Binding v, Term v)] -> Term v -> Term v
+substLet xs body = foldr (\((v,_),val) term -> subst v val term) body xs
 
 notType gamma t = do
   typeCheck gamma t >>= \case

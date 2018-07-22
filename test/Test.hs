@@ -28,6 +28,8 @@ qcRegressionTests
     , Let Rec [(('a',Lam ('a',Ty) (Var 'a')),Var 'b'),(('b',Var 'a'),Var 'b')] (Var 'a')
     , Let Rec [(('a',Ty),Var 'a'),(('b',Var 'a'),Var 'a'),(('c',Var 'a'),Var 'a')] (Var 'b')
     , App (Lam ('a',Ty) (Var 'a')) Ty
+    , Let NoRec [(('a',Ty),Ty)] (Lam ('b',Var 'a') (Var 'a'))
+    , Lam ('a',App (Lam ('a',Ty) (App (Lam ('b',Var 'a') (Let Rec [(('c',Ty),Ty)] (Var 'b'))) (Var 'a'))) Ty) Ty
     ]
 
 qcGenerated :: [Term Char]
