@@ -14,7 +14,6 @@ import QuickCheck.GenT
 import Test.QuickCheck hiding (suchThat, elements, frequency, sized, resize, suchThatMaybe, oneof, variant, choose)
 import Debug.Trace
 
-
 -- | The starting variable, and the next fresh variable to use.
 type BoundV v = (v, v, Context v)
 
@@ -27,19 +26,7 @@ type CustomGen v a = (LogicStateT () (BoundV v) Gen) a
 type TermGen v = CustomGen v (Term v)
 
 runCustomGen :: forall v a. v -> CustomGen v a -> Gen a
---runCustomGen v0 gen = observeT $ evalState' (v0,v0,[]) gen
-runCustomGen v0 = (observeT ((),(v0,v0,([]::Context v))))-- <$> runGenT gen
-
-evalStateT' :: Monad m => s -> StateT s m a -> m a
-evalStateT' = flip evalStateT
-
-instance (Monad m, Alternative m) => Alternative (GenT m) where
-  empty = lift empty
-  (GenT genA) <|> (GenT genB) = GenT (\g i -> genA g i <|> genB g i)
-
-instance MonadPlus m => MonadPlus (GenT m) where
-  mzero = empty
-  mplus = (<|>)
+runCustomGen v0 = observeT ((), (v0,v0,([]::Context v)))
 
 instance MonadGen m => MonadGen (StateT s m) where
   --liftGen :: Gen a -> StateT s m a
@@ -79,38 +66,15 @@ instance MonadGen m => MonadGen (LogicStateT gs bs m) where
   choose = lift . choose
 
 
-instance MonadGen m => MonadGen (MaybeT m) where
-  --liftGen :: Gen a -> MaybeT m a
-  liftGen = lift . liftGen
-
-  --variant :: Integral n => n -> MaybeT m a -> MaybeT m a
-  variant n (MaybeT mgx) = MaybeT (variant n mgx)
-
-  --sized :: (Int -> MaybeT m a) -> MaybeT m a
-  sized sgma
-    = MaybeT (sized $ \size -> case sgma size of
-                                 MaybeT gen -> gen)
-
-  --resize :: Int -> MaybeT m a -> MaybeT m a
-  resize n (MaybeT mgx) = MaybeT (resize n mgx)
-
-  --choose :: Random a => (a,a) -> g a
-  choose = lift . choose
-
-
 -- | Helper function for getting the current state of bound variables.
 getV :: CustomGen v (v, v, Context v)
 getV = fmap snd get
 
+-- | Helper function for setting the current state of bound variables.
 putV :: (v,v,Context v) -> CustomGen v ()
 putV v = put ((),v)
 
--- | Eval a given state transformer with the starting state. This is useful for
---   chaining evaluations of StateT, keeping the starting state adjacent to the
---   call of eval for each layer.
-evalState' :: Monad m => s -> StateT s m a -> m a
-evalState' = flip evalStateT
-
+-- | Generate a variable that's in scope.
 genExistingVar :: (Eq v, Show v, Enum v) => CustomGen v v
 genExistingVar = do
   (v0, vmax, _) <- getV
@@ -134,7 +98,6 @@ genLam = sized $ \size -> do
   (_,_,gamma) <- getV
   Lam <$> genNewBinding <*> genTerm
 
--- TODO: only generate types as the nested terms
 -- | Generate a random pi type.
 genPi :: (Eq v, Show v, Enum v) => TermGen v
 genPi = do (_,_,gamma) <- getV
@@ -150,7 +113,7 @@ genApp = sized $ \size -> do
 genTy :: TermGen v
 genTy = return Ty
 
--- | Generate a type (currently only generates 'Ty').
+-- | Generate a random letrec expression.
 genLetrec :: (Eq v, Show v, Enum v) => TermGen v
 genLetrec = do
   (_,_,gamma) <- getV
@@ -162,6 +125,7 @@ genLetrec = do
      body <- genTerm
      (return $ Let Rec (zip bindings terms) body)
 
+-- | Generate a random (non-recursive) let expression.
 genLet :: (Eq v, Show v, Enum v) => TermGen v
 genLet = do
   (_,_,gamma) <- getV
@@ -172,14 +136,11 @@ genLet = do
      body <- genTerm
      return $ Let NoRec (zip bindings terms) body
 
---TODO: handle state passing better
---TODO: make sure samples contain a healthy mix of all constructors.
---    Specifically, App seems very rare.
 -- | Generate a random term, attempting to generate sensible values to make
 --   generating well-typed terms more efficient and have a better distribution.
 --   Uses 'CustomGen' to determine the currently bound variables.
-genTerm' :: (Eq v, Show v, Enum v) => Int -> TermGen v
-genTerm' size = do
+genTerm :: (Eq v, Show v, Enum v) => TermGen v
+genTerm = sized $ \size -> do
   (v0, v, gamma) <- getV
   (do let vFreq = if fromEnum v0 == fromEnum v then const 0 else id
       frequency [ (vFreq 1000, genVar)
@@ -191,17 +152,15 @@ genTerm' size = do
                 , (size*1, resize (size `div` 2) genLetrec)
                 ])  `backtrackUnless` wellTyped gamma
 
-genTerm :: (Eq v, Show v, Enum v) => TermGen v
-genTerm = sized genTerm'
-
 -- | Generate a random term, taking the starting variable as an argument.
 --   The variable enum should be able to produce a large number of results;
 --   for example 'Int' or 'Char'.
+--   The size of the term 
 generateTerm :: (Eq v, Show v, Enum v) => v -> Gen (Term v)
 generateTerm v0 = sized $ \size -> runCustomGen v0 genTerm `suchThat'` (\t -> wellTyped [] t && maxNesting t >= size `div` 30)
 
 -- | Generate a random well-typed term, starting variables with 'a'.
-genWellTyped = generateTerm 'a'
+genCharTerm = generateTerm 'a'
 
 instance (Eq v, Show v, Enum v) => Arbitrary (Term v) where
   arbitrary = generateTerm (toEnum 0)

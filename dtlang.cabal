@@ -42,6 +42,7 @@ test-suite Test
                      , FlexibleContexts
                      , ExplicitForAll
                      , ScopedTypeVariables
+                     , TypeApplications
   other-modules:       Test.Generators
                      , Test.Interpreter
                      , Test.TypeCheck

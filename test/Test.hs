@@ -9,10 +9,12 @@ import Test.QuickCheck
 
 main :: IO ()
 main = do
-  quickCheck testGenWellTyped
-  quickCheck testIdPreservesType
-  quickCheck testIdReturnsArg
-  quickCheck testWellTypedInterpretsRight
+  quickCheck (prop_idReturnsArg @Int)
+  quickCheck (prop_wellTypedInterpretsRight @Int)
+
+  quickCheck (prop_genWellTyped @Int)
+  quickCheck (prop_idPreservesType @Int)
+
 
 qcRegressionTests :: [Term Char]
 qcRegressionTests

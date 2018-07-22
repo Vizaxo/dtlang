@@ -10,11 +10,8 @@ import Term
 import Data.Either
 import Test.QuickCheck
 
-testIdReturnsArg
-  = forAll genWellTyped $
-  \prog -> let (Right progT) = typeCheck [] prog
-           in (Right prog) === interpret ((id' `App` progT) `App` prog)
+prop_wellTypedInterpretsRight :: (Eq v, Show v, Enum v) => WellTyped v -> Bool
+prop_wellTypedInterpretsRight (WellTyped term) = isRight $ interpret term
 
-testWellTypedInterpretsRight
-  = forAll genWellTyped $
-  \prog -> isRight $ interpret prog
+prop_idReturnsArg :: (Eq v, Show v, Enum v) => WellTyped v -> Property
+prop_idReturnsArg (WellTyped term) = (Right term) === interpret (appId term)
