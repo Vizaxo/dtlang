@@ -17,3 +17,8 @@ fix f x | f x == x = x
 -- | Monadic version of 'fix'.
 fixM f x | (x >>= f) == x = x
          | otherwise    = fixM f (x >>= f)
+
+-- | Remove the given element of a list.
+without :: [a] -> Int -> [a]
+without (x:xs) 0 = xs
+without (x:xs) n = x : without xs (n-1)

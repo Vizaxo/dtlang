@@ -40,12 +40,17 @@ test-suite Test
   default-language:    Haskell2010
   default-extensions:  LambdaCase
                      , FlexibleContexts
+                     , FlexibleInstances
                      , ExplicitForAll
                      , ScopedTypeVariables
                      , TypeApplications
+                     , TupleSections
+                     , Rank2Types
+                     , GeneralizedNewtypeDeriving
   other-modules:       Test.Generators
                      , Test.Interpreter
                      , Test.TypeCheck
+                     , Test.BackTrackGen
   build-depends:       base >= 4.7 && < 5
                      , mtl
                      , QuickCheck

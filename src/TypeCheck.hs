@@ -38,7 +38,7 @@ typeCheck gamma (App a b) =
   typeCheck gamma a >>= \case
     Pi (x,xTy) ret -> do
       bTy <- typeCheck gamma b
-      unify bTy xTy
+      unify gamma bTy xTy
       return (subst x b ret)
     _ -> Left "Trying to apply a non-function type."
 typeCheck gamma Ty = Right Ty
@@ -78,7 +78,7 @@ isType' = isRight .: isType
 typeCheckBinding gamma ((x,xTy),val) = do
   ty <- typeCheck gamma val
   isType gamma xTy
-  unify xTy ty
+  unify gamma xTy ty
 
 -- TODO: actually set unification constraints
 type Unification v = StateT [(v, Term v)] (Either String)
@@ -91,38 +91,47 @@ insertEnv v x = do
   env <- get
   put ((v,x):env)
 
+canUnify :: (Eq v, Show v, Enum v) => Context v -> Term v -> Term v -> Bool
+canUnify ctx = isRight .: unify ctx
+
 -- | Unify two terms. Returns () if they can be unified, and throws an
 --   error if they can't.
-unify a b = fmap fst $ flip runStateT [] $ unify' a b
+unify a b ctx = fmap fst $ flip runStateT [] $ unify' a b ctx
 
-unify' :: (Eq v, Show v, Enum v) => Term v -> Term v -> Unification v ()
-unify' (Var u) (Var v) | v == u = return ()
-unify' (Var u) x =
-  lookupEnv u >>= \case
-    Nothing -> insertEnv u x
-    Just u' -> unify' u' x
-unify' x (Var u) =
-  lookupEnv u >>= \case
-    Nothing -> insertEnv u x
-    Just u' -> unify' x u'
-unify' a'@(Lam (x,xTy) a) b'@(Lam (y,yTy) b)
-  | x == y = unify' xTy yTy >> unify' a b
+unify' :: (Eq v, Show v, Enum v) => Context v -> Term v -> Term v -> Unification v ()
+unify' ctx (Var u) (Var v) | v == u = return ()
+unify' ctx (Var u) x =
+  case lookup u ctx of
+    Just y -> mzero
+    Nothing ->
+      lookupEnv u >>= \case
+        Nothing -> insertEnv u x
+        Just u' ->unify' ctx u' x
+unify' ctx x (Var u) =
+  case lookup u ctx of
+    Just y -> mzero
+    Nothing ->
+      lookupEnv u >>= \case
+        Nothing -> insertEnv u x
+        Just u' ->unify' ctx x u'
+unify' ctx a'@(Lam (x,xTy) a) b'@(Lam (y,yTy) b)
+  | x == y =unify' ctx xTy yTy >>unify' ctx a b
   | otherwise = do let v = freshVar a' b'
-                   unify' (alpha x v a') (alpha y v b')
-unify' a'@(Pi (x,xTy) a) b'@(Pi (y,yTy) b)
-  | x == y = unify' xTy yTy >> unify' a b
+                   unify' ctx (alpha x v a') (alpha y v b')
+unify' ctx a'@(Pi (x,xTy) a) b'@(Pi (y,yTy) b)
+  | x == y =unify' ctx xTy yTy >>unify' ctx a b
   | otherwise = do let v = freshVar a' b'
-                   unify' (alpha x v a') (alpha y v b')
-unify' (App a b) (App x y) = do
-  unify' a x
-  unify' b y
-unify' Ty Ty = return ()
-unify' (Let _ [] a) b = unify' a b
-unify' a (Let _ [] b) = unify' a b
-unify' a@(Let Rec _ _) b@(Let _ _ _) = throwError "Trying to unify a letrec"
-unify' a@(Let _ _ _) b@(Let Rec _ _) = throwError "Trying to unify a letrec"
-unify' a@(Let NoRec _ _) b@(Let NoRec _ _) = unify' (inlineLet a) (inlineLet b)
-unify' a b = throwError $ "Could not unify " <> show a <> " and " <> show b
+                   unify' ctx (alpha x v a') (alpha y v b')
+unify' ctx (App a b) (App x y) = do
+ unify' ctx a x
+ unify' ctx b y
+unify' ctx Ty Ty = return ()
+unify' ctx (Let _ [] a) b =unify' ctx a b
+unify' ctx a (Let _ [] b) =unify' ctx a b
+unify' ctx a@(Let Rec _ _) b@(Let _ _ _) = throwError "Trying to unify a letrec"
+unify' ctx a@(Let _ _ _) b@(Let Rec _ _) = throwError "Trying to unify a letrec"
+unify' ctx a@(Let NoRec _ _) b@(Let NoRec _ _) =unify' ctx (inlineLet a) (inlineLet b)
+unify' ctx a b = throwError $ "Could not unify " <> show a <> " and " <> show b
 --TODO: case
 
 --TODO: just make Term into a functor over v
@@ -163,11 +172,12 @@ allVars t = freeVars t ++ boundVars t
 -- | Get a list of all the free variables in a term.
 freeVars :: Eq v => Term v -> [v]
 freeVars (Var v) = [v]
-freeVars (Lam (v,_) body) = freeVars body \\ [v]
-freeVars (Pi (v,_) ret) = freeVars ret \\ [v]
+freeVars (Lam (v,ty) body) = (freeVars body ++ freeVars ty) \\ [v]
+freeVars (Pi (v,a) ret) = (freeVars ret ++ freeVars a) \\ [v]
 freeVars (App a b) = freeVars a ++ freeVars b
 freeVars Ty = []
 freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
+  --TODO: free vars in let bindings
 
 -- | Get a list of all the bound variables in a term.
 boundVars :: Eq v => Term v -> [v]

@@ -2,6 +2,7 @@ module Main where
 
 import Term
 
+import Test.BackTrackGen
 import Test.Interpreter
 import Test.TypeCheck
 
@@ -20,6 +21,8 @@ main = do
   quickCheck (prop_pairFstPreservesType @Int)
   quickCheck (prop_pairSndPreservesType @Int)
   quickCheck (prop_etaExpansionType @Int)
+
+  quickCheck prop_backtracks
 
 
 qcRegressionTests :: [Term Char]
