@@ -1,30 +1,32 @@
 module Test.Generators where
 
+import Equality
 import Term
 import Test.BackTrackGen
 import TypeCheck
+import Types
 import Utils
 
 import Control.Monad
 import Data.Maybe
 import Test.QuickCheck
 
-type GenTerm v = (Eq v, Show v, Enum v) => Term v -> Context v -> BackTrackGen (Term v)
+type GenTerm = Term -> Context -> BackTrackGen (Term)
 
-genTargetTy :: GenTerm v
+genTargetTy :: GenTerm
 genTargetTy Ty _ = return (return Ty) --TODO: add pi
 genTargetTy _  _ = return mzero
 
 elements' [] = return mzero
 elements' xs = elements xs
 
-genTargetVar :: GenTerm v
-genTargetVar target ctx = elements' $ return . Var . fst <$> filter (canUnify ctx target . snd) ctx
+genTargetVar :: GenTerm
+genTargetVar target ctx = elements' $ return . Var . fst <$> filter (isBetaEq target . snd) ctx
 
 fresh ctx = toEnum $ 1 + (maximumOr (-1) $ (fromEnum . fst) <$> ctx)
 
 --TODO: implement custom bind operator?
-genTargetPi :: GenTerm v
+genTargetPi :: GenTerm
 genTargetPi Ty ctx = sized $ \size -> genTargetPi' size
   where
     genTargetPi' size | size <= 0 = return mzero
@@ -38,7 +40,7 @@ genTargetPi Ty ctx = sized $ \size -> genTargetPi' size
 genTargetPi _ ctx = return mzero
 
 --TODO: implement custom bind operator?
-genTargetLam :: GenTerm v
+genTargetLam :: GenTerm
 genTargetLam (Pi (v,a) b) ctx = sized $ \size -> genTargetLam' size
   where
     genTargetLam' size | size <= 0 = return mzero
@@ -48,7 +50,7 @@ genTargetLam (Pi (v,a) b) ctx = sized $ \size -> genTargetLam' size
         Just body -> return $ return (Lam (v,a) body)
 genTargetLam _ ctx = return mzero
 
-targetVariable :: GenTerm v
+targetVariable :: GenTerm
 targetVariable (Var v) ctx = return $ lookup v ctx
 targetVariable _ ctx = return mzero
 
@@ -56,7 +58,7 @@ pickGen xs target ctx = freqBacktrack $ ((mkGen <$>) <$>) xs
   where mkGen gen = scale (subtract 1) $ gen target ctx
 
 --TODO: optimise picking of rules? Probably not needed (e.g. Var -> always targetVariable)
-genTarget :: GenTerm v
+genTarget :: GenTerm
 genTarget = pickGen
            [ (2, genTargetTy)
            , (1, genTargetVar)
@@ -67,27 +69,27 @@ genTarget = pickGen
 --TODO: add app rule
 --TODO: add indir rule
 
-genTermAndType :: forall v. (Eq v, Show v, Enum v) => Gen (Maybe (Term v, Term v))
+genTermAndType :: forall v. Gen (Maybe (Term, Term))
 genTermAndType = scale (+1) $ do
-  scale ((+0) . (`div` 1)) $ genTarget @v Ty [] >>= \case
+  scale ((+0) . (`div` 1)) $ genTarget Ty [] >>= \case
     Nothing -> return mzero
     --Not backtracking over a type that's been genTargetd... The type must be correct; can you always genTarget a term for it?
     Just ty -> ((,ty) <$>) <$> genTarget ty []
 
-genTerm :: (Eq v, Show v, Enum v) => Gen (Term v)
+genTerm :: Gen (Term)
 genTerm = fst . fromJust <$> genTermAndType
 
-prop_wellTyped = wellTyped @Int []
+prop_wellTyped = wellTyped []
 
 -- | A helper function for 'shrink' on 'Term's.
-shrinkBinding :: (Eq v, Show v, Enum v) => (Binding v, Term v) -> [(Binding v, Term v)]
+shrinkBinding :: (Binding, Term) -> [(Binding, Term)]
 shrinkBinding ((v,vTy),val) = [((v,vTy'),val') | vTy' <- shrink vTy
                                                , val' <- shrink val]
 
-noFreeVars :: (Eq v, Show v, Enum v) => Term v -> Bool
+noFreeVars :: Term -> Bool
 noFreeVars = null . freeVars
 
-instance (Eq v, Show v, Enum v) => Arbitrary (Term v) where
+instance Arbitrary (Term) where
   arbitrary = genTerm
 
   shrink = filter (noFreeVars) . shrink'
@@ -108,12 +110,21 @@ instance (Eq v, Show v, Enum v) => Arbitrary (Term v) where
                                  , body' <- shrink body]
       shrink' _ = []
 
--- TODO: Term vs WellTyped
+-- TODO: Terms WellTyped
 -- | A 'WellTyped' is a 'Term' that is well-typed.
-newtype WellTyped v = WellTyped (Term v)
+newtype WellTyped = WellTyped Term
   deriving (Eq, Show)
 
-instance (Eq v, Show v, Enum v) => Arbitrary (WellTyped v) where
+instance Arbitrary WellTyped where
   arbitrary = WellTyped <$> genTerm
 
   shrink (WellTyped t) = WellTyped <$> shrink t
+
+instance Arbitrary GenVar where
+  arbitrary = GenVar <$> arbitrary
+
+instance Arbitrary Name where
+  arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
+
+instance Arbitrary Type where
+  arbitrary = scale (+1) $ Type . fromJust <$> genTarget Ty []

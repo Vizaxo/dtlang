@@ -1,25 +1,26 @@
 module Examples where
 
-import Term
+import TC
+import Types
 import TypeCheck
 
 import Data.Either
 
 -- | id : (t:Ty) -> t -> t
 --   id = \t. \a. a
-id' :: Enum v => Term v
+id' :: Term
 id' = Lam (toEnum 0, Ty) (Lam (toEnum 1, Var (toEnum 0)) (Var (toEnum 1)))
 
-unsafeGetType :: (Eq v, Show v, Enum v) => Term v -> Term v
-unsafeGetType = fromRight undefined . typeCheck []
+unsafeGetType :: Term -> Term
+unsafeGetType = fromRight undefined . runTC . typeCheck []
 
 -- | Apply a term to id, automatically substituting in the term's type.
-appId :: (Eq v, Show v, Enum v) => Term v -> Term v
+appId :: Term -> Term
 appId t = (id' `App` unsafeGetType t) `App` t
 
 -- | fst : (t:Ty) -> t -> t -> t
 --   fst = \t. \a. \b. a
-fst' :: (Eq v, Show v, Enum v) => Term v
+fst' :: Term
 fst' = (Lam (toEnum 0, Ty)
         (Lam (toEnum 1, Var (toEnum 0))
           (Lam (toEnum 2, Var (toEnum 0))
@@ -27,7 +28,7 @@ fst' = (Lam (toEnum 0, Ty)
 
 -- | snd : (t:Ty) -> t -> t -> t
 --   snd = \t. \a. \b. b
-snd' :: (Eq v, Show v, Enum v) => Term v
+snd' :: Term
 snd' = (Lam (toEnum 0, Ty)
         (Lam (toEnum 1, Var (toEnum 0))
           (Lam (toEnum 2, Var (toEnum 0))
@@ -35,7 +36,7 @@ snd' = (Lam (toEnum 0, Ty)
 
 -- | pair : (t:Ty) -> t -> t -> (t -> t -> t) -> t
 --   pair = \t. \a. \b. \f. f a b
-pair :: (Eq v, Show v, Enum v) => Term v
+pair :: Term
 pair = (Lam (toEnum 0, Ty)
          (Lam (toEnum 5, Var (toEnum 0))
            (Lam (toEnum 6, Var (toEnum 0))

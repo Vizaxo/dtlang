@@ -1,6 +1,8 @@
 module Main where
 
+import Equality
 import Term
+import Types
 
 import Test.BackTrackGen
 import Test.Interpreter
@@ -10,39 +12,40 @@ import Test.QuickCheck
 
 main :: IO ()
 main = do
-  quickCheck (prop_idReturnsArg @Int)
-  quickCheck (prop_wellTypedInterpretsRight @Int)
-  quickCheck (prop_pairFstReturnsArg @Int)
-  quickCheck (prop_pairSndReturnsArg @Int)
-  quickCheck (prop_etaExpansion @Int)
+  quickCheck prop_idReturnsArg
+  quickCheck prop_wellTypedWhnfSucceeds
+  quickCheck prop_pairFstReturnsArg
+  quickCheck prop_pairSndReturnsArg
+  quickCheck prop_etaExpansion
 
-  quickCheck (prop_genWellTyped @Int)
-  quickCheck (prop_idPreservesType @Int)
-  quickCheck (prop_pairFstPreservesType @Int)
-  quickCheck (prop_pairSndPreservesType @Int)
-  quickCheck (prop_etaExpansionType @Int)
+  quickCheck prop_genWellTyped
+  quickCheck prop_idPreservesType
+  quickCheck prop_pairFstPreservesType
+  quickCheck prop_pairSndPreservesType
+  quickCheck prop_etaExpansionType
+
+  quickCheck prop_alphaEqId
 
   quickCheck prop_backtracks
 
-
-qcRegressionTests :: [Term Char]
+qcRegressionTests :: [Term]
 qcRegressionTests
-  = [ Lam ('a',Ty) (Lam ('b',Let Rec [(('b',Ty),Var 'b')] (Var 'b')) (Lam ('c',Var 'a') (Var 'c')))
-    , Lam ('a',Let NoRec [] Ty) (Lam ('b',Ty) (Var 'a'))
-    , Lam ('a',Let Rec [(('a',Ty),Var 'a'),(('b',Ty),Ty)] (Var 'b')) (Lam ('b',Ty) (Var 'a'))
-    , Lam ('a',Ty) (Lam ('b',Let Rec [(('b',Var 'a'),Var 'b'),(('c',Var 'a'),Var 'c')] (Var 'a')) (Lam ('c',Var 'a') Ty))
-    , Lam ('a',App (Lam ('a',Ty) (Var 'a')) (Let Rec [(('a',Ty),Var 'a'),(('b',Var 'a'),Var 'b')] (Var 'b'))) (Lam ('b',Ty) (Lam ('c',Ty) (Var 'c')))
-    , Lam ('a',App (Lam ('a',Ty) (Var 'a')) (Let Rec [(('a',Ty),Var 'b'),(('b',Var 'a'),Var 'a')] (Var 'b'))) (Lam ('b',Ty) (Lam ('c',Var 'b') (Var 'b')))
-    , Lam ('a',Ty) (Lam ('b',Let Rec [(('b',Var 'a'),Var 'a')] (Var 'b')) (Pi ('c',Ty) (Var 'c')))
-    , Let NoRec [(('b',Var 'a'),Pi ('a',Ty) (Var 'a'))] (Var 'b')
-    , Let Rec [(('a',Ty),Var 'a'),(('b',Lam ('b',Var 'a') (Var 'b')),Var 'b')] (Var 'b')
-    , Let Rec [(('a',Lam ('a',Ty) (Var 'a')),Var 'b'),(('b',Var 'a'),Var 'b')] (Var 'a')
-    , Let Rec [(('a',Ty),Var 'a'),(('b',Var 'a'),Var 'a'),(('c',Var 'a'),Var 'a')] (Var 'b')
-    , App (Lam ('a',Ty) (Var 'a')) Ty
-    , Let NoRec [(('a',Ty),Ty)] (Lam ('b',Var 'a') (Var 'a'))
-    , Lam ('a',App (Lam ('a',Ty) (App (Lam ('b',Var 'a') (Let Rec [(('c',Ty),Ty)] (Var 'b'))) (Var 'a'))) Ty) Ty
+  = [ Lam ((toEnum 0),Ty) (Lam ((toEnum 1),Let Rec [(((toEnum 1),Ty),Var (toEnum 1))] (Var (toEnum 1))) (Lam ((toEnum 2),Var (toEnum 0)) (Var (toEnum 2))))
+    , Lam ((toEnum 0),Let NoRec [] Ty) (Lam ((toEnum 1),Ty) (Var (toEnum 0)))
+    , Lam ((toEnum 0),Let Rec [(((toEnum 0),Ty),Var (toEnum 0)),(((toEnum 1),Ty),Ty)] (Var (toEnum 1))) (Lam ((toEnum 1),Ty) (Var (toEnum 0)))
+    , Lam ((toEnum 0),Ty) (Lam ((toEnum 1),Let Rec [(((toEnum 1),Var (toEnum 0)),Var (toEnum 1)),(((toEnum 2),Var (toEnum 0)),Var (toEnum 2))] (Var (toEnum 0))) (Lam ((toEnum 2),Var (toEnum 0)) Ty))
+    , Lam ((toEnum 0),App (Lam ((toEnum 0),Ty) (Var (toEnum 0))) (Let Rec [(((toEnum 0),Ty),Var (toEnum 0)),(((toEnum 1),Var (toEnum 0)),Var (toEnum 1))] (Var (toEnum 1)))) (Lam ((toEnum 1),Ty) (Lam ((toEnum 2),Ty) (Var (toEnum 2))))
+    , Lam ((toEnum 0),App (Lam ((toEnum 0),Ty) (Var (toEnum 0))) (Let Rec [(((toEnum 0),Ty),Var (toEnum 1)),(((toEnum 1),Var (toEnum 0)),Var (toEnum 0))] (Var (toEnum 1)))) (Lam ((toEnum 1),Ty) (Lam ((toEnum 2),Var (toEnum 1)) (Var (toEnum 1))))
+    , Lam ((toEnum 0),Ty) (Lam ((toEnum 1),Let Rec [(((toEnum 1),Var (toEnum 0)),Var (toEnum 0))] (Var (toEnum 1))) (Pi ((toEnum 2),Ty) (Var (toEnum 2))))
+    , Let NoRec [(((toEnum 1),Var (toEnum 0)),Pi ((toEnum 0),Ty) (Var (toEnum 0)))] (Var (toEnum 1))
+    , Let Rec [(((toEnum 0),Ty),Var (toEnum 0)),(((toEnum 1),Lam ((toEnum 1),Var (toEnum 0)) (Var (toEnum 1))),Var (toEnum 1))] (Var (toEnum 1))
+    , Let Rec [(((toEnum 0),Lam ((toEnum 0),Ty) (Var (toEnum 0))),Var (toEnum 1)),(((toEnum 1),Var (toEnum 0)),Var (toEnum 1))] (Var (toEnum 0))
+    , Let Rec [(((toEnum 0),Ty),Var (toEnum 0)),(((toEnum 1),Var (toEnum 0)),Var (toEnum 0)),(((toEnum 2),Var (toEnum 0)),Var (toEnum 0))] (Var (toEnum 1))
+    , App (Lam ((toEnum 0),Ty) (Var (toEnum 0))) Ty
+    , Let NoRec [(((toEnum 0),Ty),Ty)] (Lam ((toEnum 1),Var (toEnum 0)) (Var (toEnum 0)))
+    , Lam ((toEnum 0),App (Lam ((toEnum 0),Ty) (App (Lam ((toEnum 1),Var (toEnum 0)) (Let Rec [(((toEnum 2),Ty),Ty)] (Var (toEnum 1)))) (Var (toEnum 0)))) Ty) Ty
     ]
 
-qcGenerated :: [Term Char]
-qcGenerated = [Let Rec [(('a',Lam ('a',Let Rec [] (App (App (App (Let NoRec [(('b',Var 'a'),App (Pi ('a',Lam ('a',Pi ('a',Let NoRec [(('b',Var 'a'),Lam ('a',App (Pi ('a',App (Lam ('a',Let NoRec [(('b',Var 'a'),Lam ('a',Ty) (Var 'a'))] (Var 'a')) (Var 'a')) (Pi ('b',Var 'a') (Var 'a'))) Ty) (Var 'a')) (Var 'a'))] (Lam ('c',Ty) (Var 'b'))) (Var 'a')) (App (Var 'a') (Var 'a'))) (Var 'a')) (App (Var 'a') (Var 'a'))),(('c',App (Lam ('c',App (Let NoRec [] (Var 'a')) (Var 'a')) (Var 'c')) (Var 'c')),Var 'a')] (Var 'a')) (Var 'c')) (Var 'a')) (Lam ('d',Var 'c') (Var 'c')))) (Var 'a')),Var 'a')] (Var 'a')
+qcGenerated :: [Term]
+qcGenerated = [Let Rec [(((toEnum 0),Lam ((toEnum 0),Let Rec [] (App (App (App (Let NoRec [(((toEnum 1),Var (toEnum 0)),App (Pi ((toEnum 0),Lam ((toEnum 0),Pi ((toEnum 0),Let NoRec [(((toEnum 1),Var (toEnum 0)),Lam ((toEnum 0),App (Pi ((toEnum 0),App (Lam ((toEnum 0),Let NoRec [(((toEnum 1),Var (toEnum 0)),Lam ((toEnum 0),Ty) (Var (toEnum 0)))] (Var (toEnum 0))) (Var (toEnum 0))) (Pi ((toEnum 1),Var (toEnum 0)) (Var (toEnum 0)))) Ty) (Var (toEnum 0))) (Var (toEnum 0)))] (Lam ((toEnum 2),Ty) (Var (toEnum 1)))) (Var (toEnum 0))) (App (Var (toEnum 0)) (Var (toEnum 0)))) (Var (toEnum 0))) (App (Var (toEnum 0)) (Var (toEnum 0)))),(((toEnum 2),App (Lam ((toEnum 2),App (Let NoRec [] (Var (toEnum 0))) (Var (toEnum 0))) (Var (toEnum 2))) (Var (toEnum 2))),Var (toEnum 0))] (Var (toEnum 0))) (Var (toEnum 2))) (Var (toEnum 0))) (Lam ((toEnum 3),Var (toEnum 2)) (Var (toEnum 2))))) (Var (toEnum 0))),Var (toEnum 0))] (Var (toEnum 0))
               ]

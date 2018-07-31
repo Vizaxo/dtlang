@@ -2,41 +2,43 @@ module Test.Interpreter where
 
 import Test.Generators
 
+import Equality
 import Examples
-import Interpreter
-import TypeCheck
+import TC
 import Term
+import TypeCheck
+import Types
 
 import Data.Either
 import Test.QuickCheck
 
 -- | Any well-typed term should not give an error when interpreted to normal
 --   form.
-prop_wellTypedInterpretsRight :: (Eq v, Show v, Enum v) => WellTyped v -> Bool
-prop_wellTypedInterpretsRight (WellTyped term) = isRight $ interpretNF term
+prop_wellTypedWhnfSucceeds :: WellTyped -> Bool
+prop_wellTypedWhnfSucceeds (WellTyped term) = succeeded $ whnf term
 
 -- | Applying a term to id (specialised to the term's type) should have no
 --   effect on the value.
-prop_idReturnsArg :: (Eq v, Show v, Enum v) => WellTyped v -> Property
-prop_idReturnsArg (WellTyped term) = (Right term) === interpret (appId term)
+prop_idReturnsArg :: WellTyped -> Bool
+prop_idReturnsArg (WellTyped term) = term `isBetaEq` (appId term)
 
 -- | Applying a term twice to a pair then extracting the first element should
 --   have no effect on the value.
-prop_pairFstReturnsArg :: (Eq v, Show v, Enum v) => WellTyped v -> Property
+prop_pairFstReturnsArg :: WellTyped -> Bool
 prop_pairFstReturnsArg (WellTyped term) =
-  wellTyped [] term ==> let (Right termT) = typeCheck [] term
-                        in interpretNF term === interpretNF (pair `App` termT `App` term `App` term `App` (fst' `App` termT))
+  let (Right termT) = runTC $ typeCheck [] term
+  in term `isBetaEq` (pair `App` termT `App` term `App` term `App` (fst' `App` termT))
 
 -- | Applying a term twice to a pair then extracting the second element should
 --   have no effect on the value.
-prop_pairSndReturnsArg :: (Eq v, Show v, Enum v) => WellTyped v -> Property
+prop_pairSndReturnsArg :: WellTyped -> Bool
 prop_pairSndReturnsArg (WellTyped term) =
-  wellTyped [] term ==> let (Right termT) = typeCheck [] term
-                        in interpretNF term === interpretNF (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
+  let (Right termT) = runTC $ typeCheck [] term
+  in term `isBetaEq` (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
 
 -- | Eta-expanding a term should have no effect on the value.
-prop_etaExpansion :: (Eq v, Show v, Enum v) => v -> WellTyped v -> WellTyped v -> Property
+prop_etaExpansion :: Name -> WellTyped -> WellTyped -> Bool
 prop_etaExpansion v (WellTyped term) (WellTyped arg)
-  = interpretNF term === interpretNF (App (Lam binding term) arg)
+  = term `isBetaEq` (App (Lam binding term) arg)
   where binding = (v, argTy)
-        (Right argTy) = typeCheck [] arg
+        (Right argTy) = runTC $ typeCheck [] arg
