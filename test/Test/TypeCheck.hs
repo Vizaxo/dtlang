@@ -38,8 +38,8 @@ prop_pairSndPreservesType (WellTyped term) =
                         in return termT `tcBetaEq` typeCheck [] (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
 
 -- | Eta-expanding a term should have no effect on the type.
-prop_etaExpansionType :: Name -> WellTyped -> WellTyped -> Bool
-prop_etaExpansionType v (WellTyped term) (WellTyped arg)
+prop_etaExpansionType :: WellTyped -> WellTyped -> Name -> Bool
+prop_etaExpansionType (WellTyped term) (WellTyped arg) v
   = typeCheck [] term `tcBetaEq` typeCheck [] (App (Lam binding term) arg)
   where binding = (v, argTy)
         (Right argTy) = runTC $ typeCheck [] arg

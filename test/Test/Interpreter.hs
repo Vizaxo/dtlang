@@ -37,8 +37,8 @@ prop_pairSndReturnsArg (WellTyped term) =
   in term `isBetaEq` (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
 
 -- | Eta-expanding a term should have no effect on the value.
-prop_etaExpansion :: Name -> WellTyped -> WellTyped -> Bool
-prop_etaExpansion v (WellTyped term) (WellTyped arg)
+prop_etaExpansion :: WellTyped -> WellTyped -> Name -> Bool
+prop_etaExpansion (WellTyped term) (WellTyped arg) v
   = term `isBetaEq` (App (Lam binding term) arg)
   where binding = (v, argTy)
         (Right argTy) = runTC $ typeCheck [] arg

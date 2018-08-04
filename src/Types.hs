@@ -35,7 +35,8 @@ data Term = Var Name                           -- ^Variable
             | Ty                               -- ^Type:Type
             | Let IsRec [(Binding, Term)] Term -- ^Let bindings in body
             | Case Term [CaseTerm]             -- ^Case expr of terms
-            deriving (Eq, Show) -- TODO: remove Eq instance, explicitly use alpha/beta equality
+            deriving (Eq, Show)
+
 type CaseTerm = (Constructor, [Binding], (Term))
 
 -- | 'Type' is a synonym for 'Term', which can have its own
