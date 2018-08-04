@@ -26,14 +26,14 @@ prop_idReturnsArg (WellTyped term) = term `isBetaEq` (appId term)
 --   have no effect on the value.
 prop_pairFstReturnsArg :: WellTyped -> Bool
 prop_pairFstReturnsArg (WellTyped term) =
-  let (Right termT) = runTC $ typeCheck [] term
+  let (Right termT) = runTC $ typeCheck term
   in term `isBetaEq` (pair `App` termT `App` term `App` term `App` (fst' `App` termT))
 
 -- | Applying a term twice to a pair then extracting the second element should
 --   have no effect on the value.
 prop_pairSndReturnsArg :: WellTyped -> Bool
 prop_pairSndReturnsArg (WellTyped term) =
-  let (Right termT) = runTC $ typeCheck [] term
+  let (Right termT) = runTC $ typeCheck term
   in term `isBetaEq` (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
 
 -- | Eta-expanding a term should have no effect on the value.
@@ -41,4 +41,4 @@ prop_etaExpansion :: WellTyped -> WellTyped -> Name -> Bool
 prop_etaExpansion (WellTyped term) (WellTyped arg) v
   = term `isBetaEq` (App (Lam binding term) arg)
   where binding = (v, argTy)
-        (Right argTy) = runTC $ typeCheck [] arg
+        (Right argTy) = runTC $ typeCheck arg

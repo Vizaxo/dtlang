@@ -42,7 +42,7 @@ type CaseTerm = (Constructor, [Binding], (Term))
 -- | 'Type' is a synonym for 'Term', which can have its own
 -- 'Arbitrary' implementation.
 newtype Type = Type Term
-  deriving Show
+  deriving (Eq, Show)
 
 infixl 3 `App`
 

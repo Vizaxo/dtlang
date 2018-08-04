@@ -7,78 +7,78 @@ import Types
 import Utils
 
 import Control.Monad.Except
-import Control.Monad.State
+import Control.Monad.Trans.MultiState
 import Data.List
 
 -- | Predicate of whether a given term is well-typed in the given context.
-wellTyped :: Context -> Term -> Bool
-wellTyped = succeeded .: typeCheck
+wellTyped :: Term -> Bool
+wellTyped = succeeded . typeCheck
 
 -- | Check the type of a term in the given context. Returns the type
 -- if the term is well-typed, and gives an error otherwise.
-typeCheck :: Context -> Term -> TC Term
-typeCheck gamma (Var v) =
+typeCheck :: Term -> TC Term
+typeCheck (Var v) = do
+  gamma <- mGet
   case lookup v gamma of
     Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
     Just ty -> return ty
-typeCheck gamma (Lam (x,xTy) body) =
-  typeCheck gamma xTy >>= \case
-    Ty -> Pi (x,xTy) <$> typeCheck ((x,xTy):gamma) body
+typeCheck (Lam (x,xTy) body) = do
+  typeCheck xTy >>= \case
+    Ty -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
     t  -> throwError $ TypeError [PS "Expected type", PT Ty, PS ", got type", PT t]
-typeCheck gamma (Pi (x,xTy) ret) =
-  typeCheck gamma xTy >>= \case
+typeCheck (Pi (x,xTy) ret) = do
+  typeCheck xTy >>= \case
     Ty -> do
-       typeCheck ((x,xTy):gamma) ret >>= \case
-         Ty -> return Ty
-         t      -> throwError $ TypeError
-           [PS "Expected type ", PT Ty, PS ", got type", PT t]
+      extendCtx (x,xTy) (typeCheck ret) >>= \case
+        Ty -> return Ty
+        t  -> throwError $ TypeError
+          [PS "Expected type ", PT Ty, PS ", got type", PT t]
     t -> throwError $ TypeError [PS "Expected type ", PT Ty, PS ", got type ", PT t]
-typeCheck gamma (App a b) =
-  typeCheck gamma a >>= \case
+typeCheck (App a b) =
+  typeCheck a >>= \case
     Pi (x,xTy) ret -> do
-      bTy <- typeCheck gamma b
+      bTy <- typeCheck b
       betaEq bTy xTy
       return (subst x b ret)
     _ -> throwError $ TypeError [PS "Trying to apply a non-function type."]
-typeCheck gamma Ty = return Ty
-typeCheck gamma (Let NoRec bindings body) = do
+typeCheck Ty = return Ty
+typeCheck (Let NoRec bindings body) = do
   --Type-check the bindings without any of the bindings in scope
-  sequence $ typeCheckBinding gamma <$> bindings
-  let gamma' = (fst <$> bindings) ++ gamma
-  let body' = substLet bindings body
-  typeCheck gamma' body'
-typeCheck gamma (Let Rec bindings body) = do
-  let gamma' = (fst <$> bindings) ++ gamma
+  sequence $ typeCheckBinding <$> bindings
+  mModify ((fst <$> bindings) ++)
+  substLet bindings <$> typeCheck body
+typeCheck (Let Rec bindings body) = do
+  mModify ((fst <$> bindings) ++)
   --Type-check the bindings with the bindings recursively in scope
-  sequence $ typeCheckBinding gamma' <$> bindings
-  notType gamma' body >>= (\t -> isType gamma t >> return t)
+  sequence $ typeCheckBinding <$> bindings
+  --Don't let body of a letrec be a type
+  --TODO: Need to substitute bindings? What if non-terminating?
+  --      Use context returned from TC monad too?
+  notType body
 
 -- | Helper function to substitute the bindings of a let expression into the body.
 substLet :: [(Binding, Term)] -> Term -> Term
 substLet xs body = foldr (\((v,_),val) term -> subst v val term) body xs
 
--- | Returns () if the given term is not a type; throws an error otherwise.
-notType gamma t = do
-  typeCheck gamma t >>= \case
+-- | Returns the term's type if the given term is not a type; throws
+-- an error otherwise.
+notType t =
+  typeCheck t >>= \case
     Ty -> throwError $ TypeError
       [PS "Expected something not a type, got", PT t, PS ":", PT Ty]
-    term -> return term
+    ty -> return ty
 
 -- | Returns () if the given term is a type; throws an error otherwise.
-isType gamma t = do
-  typeCheck gamma t >>= \case
+isType t = do
+  typeCheck t >>= \case
     Ty -> return ()
     term -> throwError $ TypeError
       [PS "Expected a type, got", PT t, PS ":", PT term]
 
--- | Predicate of whether the given term is a type or not.
-isType' :: Context -> Term -> Bool
-isType' = succeeded .: isType
-
 -- | Helper function to type-check a single let binding.
-typeCheckBinding gamma ((x,xTy),val) = do
-  ty <- typeCheck gamma val
-  isType gamma xTy
+typeCheckBinding ((x,xTy),val) = do
+  ty <- typeCheck val
+  isType xTy
   betaEq xTy ty
 
 -- | Get a list of all the bound and free variables in a term.

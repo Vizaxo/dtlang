@@ -12,7 +12,7 @@ id' :: Term
 id' = Lam (toEnum 0, Ty) (Lam (toEnum 1, Var (toEnum 0)) (Var (toEnum 1)))
 
 unsafeGetType :: Term -> Term
-unsafeGetType = fromRight undefined . runTC . typeCheck []
+unsafeGetType = fromRight undefined . runTC . typeCheck
 
 -- | Apply a term to id, automatically substituting in the term's type.
 appId :: Term -> Term

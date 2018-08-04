@@ -79,7 +79,7 @@ genTermAndType = scale (+1) $ do
 genTerm :: Gen (Term)
 genTerm = fst . fromJust <$> genTermAndType
 
-prop_wellTyped = wellTyped []
+prop_wellTyped = wellTyped
 
 -- | A helper function for 'shrink' on 'Term's.
 shrinkBinding :: (Binding, Term) -> [(Binding, Term)]

@@ -29,7 +29,8 @@ tests = testGroup "Tests" [evaluator, typeChecker, equality, generator]
 --- Add more tests
 testTermProp name prop = testGroup name
   [ testProperty "generated" prop
-  , testGroup "regression" $ testProperty "" <$> (prop <$> wellTypedRegression)
+  , testGroup "regression" $ do testCase <- wellTypedRegression
+                                return $ testProperty (show testCase) (prop testCase)
   ]
 
 evaluator :: TestTree
@@ -43,7 +44,8 @@ evaluator = testGroup "evaluator"
 
 typeChecker :: TestTree
 typeChecker = testGroup "type checker"
-  [ testTermProp "id preserves the argument's type" prop_idPreservesType
+  [ testTermProp "the type of the term is well-typed" prop_typeOfIsWellTyped
+  , testTermProp "id preserves the argument's type" prop_idPreservesType
   , testTermProp "`fst $ pair a a` preserves a's type" prop_pairFstPreservesType
   , testTermProp "`snd $ pair a a` preserves a's type" prop_pairSndPreservesType
   , testTermProp "eta expanding a term and applying it to an argument preserves type" prop_etaExpansionType
@@ -79,7 +81,10 @@ qcRegressionTests
     ]
 
 wellTypedRegression :: [WellTyped]
-wellTypedRegression = WellTyped <$> (rights $ runTC . typeCheck [] <$> qcRegressionTests)
+wellTypedRegression = WellTyped <$> terms ++ types
+  where
+    terms = filter (isRight . runTC . typeCheck) qcRegressionTests
+    types = rights $ runTC . typeCheck <$> qcRegressionTests
 
 qcGenerated :: [Term]
 qcGenerated = [Let Rec [(((toEnum 0),Lam ((toEnum 0),Let Rec [] (App (App (App (Let NoRec [(((toEnum 1),Var (toEnum 0)),App (Pi ((toEnum 0),Lam ((toEnum 0),Pi ((toEnum 0),Let NoRec [(((toEnum 1),Var (toEnum 0)),Lam ((toEnum 0),App (Pi ((toEnum 0),App (Lam ((toEnum 0),Let NoRec [(((toEnum 1),Var (toEnum 0)),Lam ((toEnum 0),Ty) (Var (toEnum 0)))] (Var (toEnum 0))) (Var (toEnum 0))) (Pi ((toEnum 1),Var (toEnum 0)) (Var (toEnum 0)))) Ty) (Var (toEnum 0))) (Var (toEnum 0)))] (Lam ((toEnum 2),Ty) (Var (toEnum 1)))) (Var (toEnum 0))) (App (Var (toEnum 0)) (Var (toEnum 0)))) (Var (toEnum 0))) (App (Var (toEnum 0)) (Var (toEnum 0)))),(((toEnum 2),App (Lam ((toEnum 2),App (Let NoRec [] (Var (toEnum 0))) (Var (toEnum 0))) (Var (toEnum 2))) (Var (toEnum 2))),Var (toEnum 0))] (Var (toEnum 0))) (Var (toEnum 2))) (Var (toEnum 0))) (Lam ((toEnum 3),Var (toEnum 2)) (Var (toEnum 2))))) (Var (toEnum 0))),Var (toEnum 0))] (Var (toEnum 0))
