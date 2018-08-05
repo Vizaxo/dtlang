@@ -55,6 +55,7 @@ test-suite Test
                      , TupleSections
                      , Rank2Types
                      , GeneralizedNewtypeDeriving
+                     , InstanceSigs
   other-modules:       Test.DataTypes
                      , Test.Generators
                      , Test.Interpreter
@@ -70,3 +71,4 @@ test-suite Test
                      , tasty-hunit
                      , tasty-quickcheck
                      , transformers
+                     , random

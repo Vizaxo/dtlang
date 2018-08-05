@@ -8,53 +8,84 @@
 -- Automation of Software Test (AST '11).
 module Test.BackTrackGen where
 
-import Term
-import TypeCheck
 import Utils
 
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
 import Data.Maybe
-import Test.QuickCheck
+import Test.QuickCheck hiding (variant, sized, resize, choose, frequency)
+import QuickCheck.GenT
+import System.Random
 
---TODO: implement backtracking in the monad?
 -- | A generator which can fail. This allows backtracking, using 'freqBacktrack'.
-type BackTrackGen a = Gen (Maybe a)
+type BackTrackGen a = MaybeT Gen a
+
+-- | Run a 'BackTrackGen'. This is currently just 'runMaybeT', but
+-- might change if more transformers are added to the monad.
+runBackTrackGen :: BackTrackGen a -> Gen (Maybe a)
+runBackTrackGen = runMaybeT
+
+instance MonadGen m => MonadGen (MaybeT m) where
+  liftGen :: Gen a -> MaybeT m a
+  liftGen = lift . liftGen
+
+  variant :: Integral n => n -> MaybeT m a -> MaybeT m a
+  variant n (MaybeT mgx) = MaybeT (variant n mgx)
+
+  sized :: (Int -> MaybeT m a) -> MaybeT m a
+  sized (smgx) = MaybeT (sized (runMaybeT . smgx))
+
+  resize :: Int -> MaybeT m a -> MaybeT m a
+  resize n (MaybeT ma) = MaybeT (resize n ma)
+
+  choose :: Random a => (a,a) -> MaybeT m a
+  choose = lift . choose
+
+-- | A re-implementation of 'scale' for any 'MonadGen'.
+scale :: MonadGen m => (Int -> Int) -> m a -> m a
+scale f m = sized $ \size -> resize (f size) m
 
 -- | The QuickCheck 'frequency' function, but it will backtrack over
 -- failed branches. It will never revisit a failed branch, so nested
 -- branches should also use this function at failure points if you
 -- want to consider all possible branches.
 freqBacktrack :: [(Int, BackTrackGen a)] -> BackTrackGen a
-freqBacktrack [] = return mzero
-freqBacktrack xs = do
+freqBacktrack [] = mzero
+freqBacktrack xs = MaybeT $ do
   let tagged = zip (fst <$> xs) (return <$> [0..])
   index <- frequency tagged
-  try <- snd $ xs !! index
+  try <- runBackTrackGen $ snd $ xs !! index
   case try of
-    Nothing -> freqBacktrack (xs `without` index)
-    _ -> return try
+    Nothing -> runBackTrackGen $ freqBacktrack (xs `without` index)
+    _-> return try
 
 -- | 'freqBacktrack' properly backtracks over failed branches.
-prop_backtracks = forAll testBacktrack isJust
+prop_backtracks = forAll (runMaybeT testBacktrack) isJust
+
+--TODO: use this as a benchmark
+expensiveBacktrack :: Int -> BackTrackGen Char
+expensiveBacktrack n = iterate tree mzero !! 2
+  where tree x = freqBacktrack $ replicate n (1, x)
+
 
 testBacktrack :: BackTrackGen Char
 testBacktrack = freqBacktrack
-  [ (10, return mzero)
-  , (1, freqBacktrack [ (1, freqBacktrack [ (10, return mzero)
-                                          , (1, return $ return 'a')
-
-                                          , (1, freqBacktrack [ (10, return mzero)
-                                                              , (1, return mzero)
-                                                              ])
-                                          , (10, return mzero)
+  [ (100, expensiveBacktrack 5)
+  , (1, freqBacktrack [ (1, freqBacktrack [ (100, expensiveBacktrack 5)
+                                          , (1, return 'a')
+                                          , (100, expensiveBacktrack 5)
+                                          , (100, expensiveBacktrack 5)
+                                          , (100, expensiveBacktrack 5)
+                                          , (100, expensiveBacktrack 5)
+                                          , (100, expensiveBacktrack 5)
                                           ])
-                      , (10, return mzero)
+                      , (100, expensiveBacktrack 5)
                       ])
-  , (1, return mzero)
-  , (10, freqBacktrack [ (1, freqBacktrack [ (10, return mzero)
-                                          , (1, return mzero)
-                                          ])
-                      , (10, return mzero)
-                      ])
+  , (100, expensiveBacktrack 5)
+  , (100, expensiveBacktrack 5)
+  , (100, expensiveBacktrack 5)
+  , (100, expensiveBacktrack 5)
+  , (100, expensiveBacktrack 5)
+  , (100, expensiveBacktrack 5)
   ]
-

@@ -8,20 +8,22 @@ import Types
 import Utils
 
 import Control.Monad
+import Control.Monad.Trans.Maybe
 import Data.Maybe
-import Test.QuickCheck
+import QuickCheck.GenT
+import Test.QuickCheck (Arbitrary, arbitrary, shrink, Gen, shrinkList)
 
 type GenTerm = Term -> Context -> BackTrackGen (Term)
 
 genTargetTy :: GenTerm
-genTargetTy Ty _ = return (return Ty) --TODO: add pi
-genTargetTy _  _ = return mzero
+genTargetTy Ty _ = return Ty
+genTargetTy _  _ = mzero
 
-elements' [] = return mzero
+elements' [] = mzero
 elements' xs = elements xs
 
 genTargetVar :: GenTerm
-genTargetVar target ctx = elements' $ return . Var . fst <$> filter (isBetaEq target . snd) ctx
+genTargetVar target ctx = elements' $ Var . fst <$> filter (isBetaEq target . snd) ctx
 
 fresh ctx = toEnum $ 1 + (maximumOr (-1) $ (fromEnum . fst) <$> ctx)
 
@@ -29,30 +31,27 @@ fresh ctx = toEnum $ 1 + (maximumOr (-1) $ (fromEnum . fst) <$> ctx)
 genTargetPi :: GenTerm
 genTargetPi Ty ctx = sized $ \size -> genTargetPi' size
   where
-    genTargetPi' size | size <= 0 = return mzero
+    genTargetPi' size | size <= 0 = mzero
     genTargetPi' _ = do
       let v = fresh ctx
-      genTarget Ty ctx >>= \case
-        Nothing -> return mzero
-        Just a -> genTarget Ty ((v,a):ctx) >>= \case
-          Nothing -> return mzero
-          Just b -> return $ return (Pi (v,a) b)
-genTargetPi _ ctx = return mzero
+      a <- genTarget Ty ctx
+      b <- genTarget Ty ((v,a):ctx)
+      return (Pi (v,a) b)
+genTargetPi _ ctx = mzero
 
 --TODO: implement custom bind operator?
 genTargetLam :: GenTerm
 genTargetLam (Pi (v,a) b) ctx = sized $ \size -> genTargetLam' size
   where
-    genTargetLam' size | size <= 0 = return mzero
+    genTargetLam' size | size <= 0 = mzero
     genTargetLam' _ = do
-      genTarget b ((v,a):ctx) >>= \case
-        Nothing -> return mzero
-        Just body -> return $ return (Lam (v,a) body)
-genTargetLam _ ctx = return mzero
+      body <- genTarget b ((v,a):ctx)
+      return (Lam (v,a) body)
+genTargetLam _ ctx = mzero
 
 targetVariable :: GenTerm
-targetVariable (Var v) ctx = return $ lookup v ctx
-targetVariable _ ctx = return mzero
+targetVariable (Var v) ctx = MaybeT $ return $ lookup v ctx
+targetVariable _ ctx = mzero
 
 pickGen xs target ctx = freqBacktrack $ ((mkGen <$>) <$>) xs
   where mkGen gen = scale (subtract 1) $ gen target ctx
@@ -70,11 +69,12 @@ genTarget = pickGen
 --TODO: add indir rule
 
 genTermAndType :: forall v. Gen (Maybe (Term, Term))
-genTermAndType = scale (+1) $ do
-  scale ((+0) . (`div` 1)) $ genTarget Ty [] >>= \case
-    Nothing -> return mzero
-    --Not backtracking over a type that's been genTargetd... The type must be correct; can you always genTarget a term for it?
-    Just ty -> ((,ty) <$>) <$> genTarget ty []
+genTermAndType = scale (+1) . runBackTrackGen $ do
+  ty <- genTarget Ty []
+  --Not backtracking over a type that's been genTargetd... The type
+  --must be correct; can you always genTarget a term for it?
+  term <- genTarget ty []
+  return (ty, term)
 
 genTerm :: Gen (Term)
 genTerm = fst . fromJust <$> genTermAndType
@@ -127,4 +127,4 @@ instance Arbitrary Name where
   arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
 
 instance Arbitrary Type where
-  arbitrary = scale (+1) $ Type . fromJust <$> genTarget Ty []
+  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty [])

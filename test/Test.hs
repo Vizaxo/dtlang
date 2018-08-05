@@ -20,15 +20,13 @@ import Test.Tasty.HUnit
 main :: IO ()
 main = defaultMain tests
 
+--TODO: make benchmarking suite
+genBenchmark :: IO ()
+genBenchmark = sample $ resize 14 $ arbitrary @WellTyped
+
 tests :: TestTree
 tests = testGroup "Tests" [evaluator, typeChecker, dataTypes, equality, generator]
 
---TODO:
--- Automatically do this for multiple term arguments
--- Handle Term, WellTyped, and Type separately
--- Collapse test output into one section
--- Use the same generated terms for all tests to allow us to spend longer generating big terms
---- Add more tests
 testTermProp name prop = testGroup name
   [ QC.testProperty "generated" prop
   , testGroup "regression" $ do testCase <- wellTypedRegression
