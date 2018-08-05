@@ -56,6 +56,46 @@ typeCheck (Let Rec bindings body) = do
   --      Use context returned from TC monad too?
   notType body
 
+-- | Type-check a data declaration. If successful, it adds the type
+-- and constructors to the context.
+typeCheckData :: DataDecl -> TC ()
+typeCheckData (name, (Type ty), cs) = do
+  nameUnique name
+  ty `betaEq` Ty
+  mModify ((name,ty):)
+  bs <- mapM typeCheckC cs
+  mapM (\b@(n,_) -> nameUnique n >> mModify (b:)) bs
+  mModify (bs ++)
+  where
+    typeCheckC (c, (Type cTy)) = do
+      cTy `hasType` (Type Ty)
+      cTy' <- whnf cTy
+      returnsData cTy'
+      return (c, cTy)
+      where
+        --TODO: for now this only deals with datatypes with type Ty
+        --Add supports for datatypes with Pi types
+        returnsData = whnf >=> returnsData'
+        returnsData' (Pi (_,_) ret) = returnsData ret
+        returnsData' (Var retName)
+          | retName == name = success
+        returnsData' _ =
+          throwError $ TypeError [PS "Constructor", PN c, PS "doesn't return the type", PN name]
+
+-- | Check that a given name does not already occur in the context.
+nameUnique :: Name -> TC ()
+nameUnique n = do
+  ctx <- mGet @Context
+  case lookup n ctx of
+    Nothing -> success
+    Just _ -> throwError $ TypeError [PS "The name", PN n, PS "is already defined"]
+
+-- | Check that a given term has the given type.
+hasType :: Term -> Type -> TC ()
+hasType t (Type tTy) = do
+  tTy' <- typeCheck t
+  tTy `betaEq` tTy'
+
 -- | Helper function to substitute the bindings of a let expression into the body.
 substLet :: [(Binding, Term)] -> Term -> Term
 substLet xs body = foldr (\((v,_),val) term -> subst v val term) body xs

@@ -42,3 +42,22 @@ pair = (Lam (toEnum 0, Ty)
            (Lam (toEnum 6, Var (toEnum 0))
              (Lam (toEnum 2, Pi (toEnum 3, Var (toEnum 0)) (Pi (toEnum 4, Var (toEnum 0)) (Var (toEnum 0))))
                (App (App (Var (toEnum 2)) (Var (toEnum 5))) (Var (toEnum 6)))))))
+
+
+nat :: DataDecl
+nat = (Specified "Nat"
+      , Type Ty
+      , [(Specified "Zero", Type $ Var (Specified "Nat"))
+        ,(Specified "Succ", Type $
+           Pi (Specified "x",Var (Specified "Nat"))
+             (Var (Specified "Nat")))])
+
+zeroT :: Term
+zeroT = Var (Specified "Zero")
+
+succT :: Term
+succT = Var (Specified "Succ")
+
+three :: Term
+three = succT `App` succT `App` succT `App` zeroT
+

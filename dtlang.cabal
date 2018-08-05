@@ -55,7 +55,8 @@ test-suite Test
                      , TupleSections
                      , Rank2Types
                      , GeneralizedNewtypeDeriving
-  other-modules:       Test.Generators
+  other-modules:       Test.DataTypes
+                     , Test.Generators
                      , Test.Interpreter
                      , Test.TypeCheck
                      , Test.BackTrackGen

@@ -9,16 +9,16 @@ type Program = ( [DataDecl] -- ^Data declarations
 
 -- | A data declaration has a name, a type, and a list of constructors.
 --   Each constructor has an associated type.
-type DataDecl = ( Name                         -- ^Datatype name
-                , Term                    -- ^Type of the datatype
-                , [(Constructor, Term)] -- ^Constructor declarations
+type DataDecl = ( Name                  -- ^Datatype name
+                , Type                  -- ^Type of the datatype
+                , [(Constructor, Type)] -- ^Constructor declarations
                 )
 
--- | A constructor has a name, a tag, and an arity.
-type Constructor = (Name, Int, Int)
+-- | A constructor is a name.
+type Constructor = Name
 
 -- | A top-level definition is a name and a body.
-type TopLevel = ( Name      -- ^Name
+type TopLevel = ( Name -- ^Name
                 , Term -- ^Body
                 )
 
@@ -37,7 +37,7 @@ data Term = Var Name                           -- ^Variable
             | Case Term [CaseTerm]             -- ^Case expr of terms
             deriving (Eq, Show)
 
-type CaseTerm = (Constructor, [Binding], (Term))
+type CaseTerm = (Constructor, [Binding], Type)
 
 -- | 'Type' is a synonym for 'Term', which can have its own
 -- 'Arbitrary' implementation.

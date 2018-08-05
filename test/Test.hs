@@ -7,19 +7,21 @@ import Types
 import TypeCheck
 
 import Test.BackTrackGen
+import Test.DataTypes
 import Test.Generators
 import Test.Interpreter
 import Test.TypeCheck
 
 import Data.Either
 import Test.Tasty
-import Test.Tasty.QuickCheck
+import Test.Tasty.QuickCheck as QC
+import Test.Tasty.HUnit
 
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests" [evaluator, typeChecker, equality, generator]
+tests = testGroup "Tests" [evaluator, typeChecker, dataTypes, equality, generator]
 
 --TODO:
 -- Automatically do this for multiple term arguments
@@ -28,9 +30,9 @@ tests = testGroup "Tests" [evaluator, typeChecker, equality, generator]
 -- Use the same generated terms for all tests to allow us to spend longer generating big terms
 --- Add more tests
 testTermProp name prop = testGroup name
-  [ testProperty "generated" prop
+  [ QC.testProperty "generated" prop
   , testGroup "regression" $ do testCase <- wellTypedRegression
-                                return $ testProperty (show testCase) (prop testCase)
+                                return $ QC.testProperty (show testCase) (prop testCase)
   ]
 
 evaluator :: TestTree
@@ -51,15 +53,21 @@ typeChecker = testGroup "type checker"
   , testTermProp "eta expanding a term and applying it to an argument preserves type" prop_etaExpansionType
   ]
 
+dataTypes :: TestTree
+dataTypes = testGroup "data types"
+  [ testCase "duplicate constructors are disallowed" test_dupConstructorsDisallowed
+  , testCase "a constructor with a return type that is not the datatype is disallowed" test_constructorNotReturnDataDisallowed
+  ]
+
 equality :: TestTree
 equality = testGroup "equality"
-  [ testProperty "(λx:A.x) =α (λy:A.y)" prop_alphaEqId
+  [ QC.testProperty "(λx:A.x) =α (λy:A.y)" prop_alphaEqId
   ]
 
 generator :: TestTree
 generator = testGroup "generator"
   [ testTermProp "a generated WellTyped is always well typed" prop_genWellTyped
-  , testProperty "generator backtracks properly" prop_backtracks
+  , QC.testProperty "generator backtracks properly" prop_backtracks
   ]
 
 qcRegressionTests :: [Term]
