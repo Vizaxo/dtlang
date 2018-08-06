@@ -29,6 +29,7 @@ library
                      , TypeApplications
                      , MultiParamTypeClasses
                      , FlexibleInstances
+                     , FlexibleContexts
   build-depends:       base >= 4.7 && < 5
                      , mtl
                      , multistate
@@ -72,3 +73,4 @@ test-suite Test
                      , tasty-quickcheck
                      , transformers
                      , random
+                     , multistate

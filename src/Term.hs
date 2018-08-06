@@ -3,6 +3,8 @@ module Term where
 import Types
 import Utils
 
+import Data.List
+
 -- | Get the maximum nesting level of a term.
 maxNesting :: Term -> Int
 maxNesting (Var v) = 0
@@ -47,3 +49,26 @@ prettyPrint (Let rec bindings body) = pplet rec <> ppbindings <> "in (" <> prett
   where pplet Rec = "letrec"
         pplet NoRec = "let"
         ppbindings = " bindings "
+
+-- | Get a list of all the bound and free variables in a term.
+allVars :: Term -> [Name]
+allVars t = freeVars t ++ boundVars t
+
+-- | Get a list of all the free variables in a term.
+freeVars :: Term -> [Name]
+freeVars (Var v) = [v]
+freeVars (Lam (v,ty) body) = (freeVars body ++ freeVars ty) \\ [v]
+freeVars (Pi (v,a) ret) = (freeVars ret ++ freeVars a) \\ [v]
+freeVars (App a b) = freeVars a ++ freeVars b
+freeVars Ty = []
+freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
+  --TODO: free vars in let bindings
+
+-- | Get a list of all the bound variables in a term.
+boundVars :: Term -> [Name]
+boundVars (Var v) = []
+boundVars (Lam (v,_) body) = v:boundVars body
+boundVars (Pi (v,_) ret) = v:boundVars ret
+boundVars (App a b) = boundVars a ++ boundVars b
+boundVars Ty = []
+boundVars (Let _ xs body) = fmap (fst . fst) xs ++ boundVars body

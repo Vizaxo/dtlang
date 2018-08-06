@@ -59,13 +59,23 @@ dataTypes = testGroup "data types"
 
 equality :: TestTree
 equality = testGroup "equality"
-  [ QC.testProperty "(λx:A.x) =α (λy:A.y)" prop_alphaEqId
+  [ QC.testProperty "(λx:A.x) =α (λy:A.y)" prop_eqIdAlpha
+  , QC.testProperty "(λx:A.x) =β (λy:A.y)" prop_eqIdBeta
+  , QC.testProperty "fst =/α= snd" prop_fstNotSndAlpha
+  , QC.testProperty "fst =/β= snd" prop_fstNotSndBeta
+  , QC.testProperty "typeof fst =/α= typeof snd" prop_fstNotSndTyAlpha
+  , QC.testProperty "typeof fst =/β= typeof snd" prop_fstNotSndTyBeta
   ]
 
 generator :: TestTree
 generator = testGroup "generator"
   [ testTermProp "a generated WellTyped is always well typed" prop_genWellTyped
   , QC.testProperty "generator backtracks properly" prop_backtracks
+  ]
+
+tc :: TestTree
+tc = testGroup "tc"
+  [ QC.testProperty "fresh generates fresh variables" prop_freshIsFresh
   ]
 
 qcRegressionTests :: [Term]

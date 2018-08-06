@@ -38,7 +38,7 @@ typeCheck (App a b) =
   typeCheck a >>= \case
     Pi (x,xTy) ret -> do
       bTy <- typeCheck b
-      betaEq bTy xTy
+      extendTypeError (betaEq bTy xTy) [PS "When type-checking", PT (App a b)]
       return (subst x b ret)
     _ -> throwError $ TypeError [PS "Trying to apply a non-function type."]
 typeCheck Ty = return Ty
@@ -93,8 +93,11 @@ nameUnique n = do
 -- | Check that a given term has the given type.
 hasType :: Term -> Type -> TC ()
 hasType t (Type tTy) = do
+  ctx <- mGet
   tTy' <- typeCheck t
-  tTy `betaEq` tTy'
+  extendTypeError (tTy `betaEq` tTy')
+    [PS "while checking if", PT t, PS "has type", PT tTy
+    ,PS "in the context", PC ctx]
 
 -- | Helper function to substitute the bindings of a let expression into the body.
 substLet :: [(Binding, Term)] -> Term -> Term
@@ -121,25 +124,3 @@ typeCheckBinding ((x,xTy),val) = do
   isType xTy
   betaEq xTy ty
 
--- | Get a list of all the bound and free variables in a term.
-allVars :: Term -> [Name]
-allVars t = freeVars t ++ boundVars t
-
--- | Get a list of all the free variables in a term.
-freeVars :: Term -> [Name]
-freeVars (Var v) = [v]
-freeVars (Lam (v,ty) body) = (freeVars body ++ freeVars ty) \\ [v]
-freeVars (Pi (v,a) ret) = (freeVars ret ++ freeVars a) \\ [v]
-freeVars (App a b) = freeVars a ++ freeVars b
-freeVars Ty = []
-freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
-  --TODO: free vars in let bindings
-
--- | Get a list of all the bound variables in a term.
-boundVars :: Term -> [Name]
-boundVars (Var v) = []
-boundVars (Lam (v,_) body) = v:boundVars body
-boundVars (Pi (v,_) ret) = v:boundVars ret
-boundVars (App a b) = boundVars a ++ boundVars b
-boundVars Ty = []
-boundVars (Let _ xs body) = fmap (fst . fst) xs ++ boundVars body
