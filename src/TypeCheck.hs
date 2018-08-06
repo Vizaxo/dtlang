@@ -23,19 +23,19 @@ typeCheck (Var v) = do
     Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
     Just ty -> return ty
 typeCheck (Lam (x,xTy) body) = do
-  typeCheck xTy >>= \case
+  typeCheck xTy >>= whnf >>= \case
     Ty -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
     t  -> throwError $ TypeError [PS "Expected type", PT Ty, PS ", got type", PT t]
 typeCheck (Pi (x,xTy) ret) = do
-  typeCheck xTy >>= \case
+  typeCheck xTy >>= whnf >>= \case
     Ty -> do
-      extendCtx (x,xTy) (typeCheck ret) >>= \case
+      extendCtx (x,xTy) (typeCheck ret) >>= whnf >>= \case
         Ty -> return Ty
         t  -> throwError $ TypeError
           [PS "Expected type ", PT Ty, PS ", got type", PT t]
     t -> throwError $ TypeError [PS "Expected type ", PT Ty, PS ", got type ", PT t]
 typeCheck (App a b) =
-  typeCheck a >>= \case
+  typeCheck a >>= whnf >>= \case
     Pi (x,xTy) ret -> do
       bTy <- typeCheck b
       extendTypeError (betaEq bTy xTy) [PS "When type-checking", PT (App a b)]
