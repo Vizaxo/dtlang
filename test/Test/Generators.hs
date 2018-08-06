@@ -49,10 +49,6 @@ genTargetLam (Pi (v,a) b) ctx = sized $ \size -> genTargetLam' size
       return (Lam (v,a) body)
 genTargetLam _ ctx = mzero
 
-targetVariable :: GenTerm
-targetVariable (Var v) ctx = MaybeT $ return $ lookup v ctx
-targetVariable _ ctx = mzero
-
 pickGen xs target ctx = freqBacktrack $ ((mkGen <$>) <$>) xs
   where mkGen gen = scale (subtract 1) $ gen target ctx
 
@@ -63,7 +59,6 @@ genTarget = pickGen
            , (1, genTargetVar)
            , (3, genTargetPi)
            , (5, genTargetLam)
-           , (1, targetVariable)
            ]
 --TODO: add app rule
 --TODO: add indir rule
