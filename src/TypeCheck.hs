@@ -17,11 +17,7 @@ wellTyped = succeeded . typeCheck
 -- | Check the type of a term in the given context. Returns the type
 -- if the term is well-typed, and gives an error otherwise.
 typeCheck :: Term -> TC Term
-typeCheck (Var v) = do
-  gamma <- mGet
-  case lookup v gamma of
-    Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
-    Just ty -> return ty
+typeCheck (Var v) = fromCtx v
 typeCheck (Lam (x,xTy) body) = do
   typeCheck xTy >>= whnf >>= \case
     Ty -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
@@ -92,12 +88,18 @@ nameUnique n = do
 
 -- | Check that a given term has the given type.
 hasType :: Term -> Type -> TC ()
-hasType t (Type tTy) = do
+hasType t (Type target) = do
   ctx <- mGet
-  tTy' <- typeCheck t
-  extendTypeError (tTy `betaEq` tTy')
+  tTy <- typeCheck t
+  extendTypeError (target `betaEq` tTy)
     [PS "while checking if", PT t, PS "has type", PT tTy
     ,PS "in the context", PC ctx]
+
+fromCtx v = do
+  ctx <- mGet
+  case lookup v ctx of
+    Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
+    Just ty -> return ty
 
 -- | Helper function to substitute the bindings of a let expression into the body.
 substLet :: [(Binding, Term)] -> Term -> Term

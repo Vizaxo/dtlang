@@ -57,11 +57,11 @@ allVars t = freeVars t ++ boundVars t
 -- | Get a list of all the free variables in a term.
 freeVars :: Term -> [Name]
 freeVars (Var v) = [v]
-freeVars (Lam (v,ty) body) = (freeVars body ++ freeVars ty) \\ [v]
-freeVars (Pi (v,a) ret) = (freeVars ret ++ freeVars a) \\ [v]
-freeVars (App a b) = freeVars a ++ freeVars b
+freeVars (Lam (v,ty) body) = nub (freeVars body ++ freeVars ty) \\ [v]
+freeVars (Pi (v,a) ret) = nub (freeVars ret ++ freeVars a) \\ [v]
+freeVars (App a b) = nub $ freeVars a ++ freeVars b
 freeVars Ty = []
-freeVars (Let _ xs body) = freeVars body \\ fmap (fst . fst) xs
+freeVars (Let _ xs body) = nub (freeVars body) \\ fmap (fst . fst) (nub xs)
   --TODO: free vars in let bindings
 
 -- | Get a list of all the bound variables in a term.

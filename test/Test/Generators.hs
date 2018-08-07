@@ -1,78 +1,119 @@
 module Test.Generators where
 
 import Equality
+import Examples
 import Term
 import Test.BackTrackGen
+import TC hiding (fresh)
 import TypeCheck
 import Types
 import Utils
 
 import Control.Monad
 import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.MultiState
 import Data.Maybe
 import QuickCheck.GenT
-import Test.QuickCheck (Arbitrary, arbitrary, shrink, Gen, shrinkList)
+import Test.QuickCheck (Property, Arbitrary, arbitrary, shrink, Gen, shrinkList, collect, (===))
 
-type GenTerm = Term -> Context -> BackTrackGen (Term)
+type GenTerm = Term -> Context -> [Name] -> BackTrackGen (Term)
 
 genTargetTy :: GenTerm
-genTargetTy Ty _ = return Ty
-genTargetTy _  _ = mzero
+genTargetTy Ty _ _ = sized $ \size -> if size < (-1) then mzero else return Ty
+genTargetTy _  _ _ = mzero
 
 elements' [] = mzero
 elements' xs = elements xs
 
 genTargetVar :: GenTerm
-genTargetVar target ctx = elements' $ Var . fst <$> filter (isBetaEq target . snd) ctx
+genTargetVar target ctx _ = sized $ \size -> if size < (-1) then mzero else elements' $ Var . fst <$> filter (isBetaEq target . snd) ctx
 
-fresh ctx = toEnum $ 1 + (maximumOr (-1) $ (fromEnum . fst) <$> ctx)
+fresh :: Context -> [Name] -> Name
+fresh ctx avoid = toEnum $ 1 + (maximumOr (-1) $ fromEnum <$> (fst <$> ctx) ++ avoid)
 
---TODO: implement custom bind operator?
+prop_GenFreshIsFresh :: Context -> [Name] -> Bool
+prop_GenFreshIsFresh ctx avoid =
+  let v = fresh ctx avoid
+  in not (elem v ((fst <$> ctx) ++ avoid))
+
 genTargetPi :: GenTerm
-genTargetPi Ty ctx = sized $ \size -> genTargetPi' size
+genTargetPi Ty ctx avoid = sized $ \size -> genTargetPi' size
   where
     genTargetPi' size | size <= 0 = mzero
     genTargetPi' _ = do
-      let v = fresh ctx
-      a <- genTarget Ty ctx
-      b <- genTarget Ty ((v,a):ctx)
+      let v = fresh ctx avoid
+      a <- genTarget Ty ctx (v:avoid)
+      b <- genTarget Ty ((v,a):ctx) (v:avoid)
       return (Pi (v,a) b)
-genTargetPi _ ctx = mzero
+genTargetPi _ ctx _ = mzero
 
---TODO: implement custom bind operator?
 genTargetLam :: GenTerm
-genTargetLam (Pi (v,a) b) ctx = sized $ \size -> genTargetLam' size
+genTargetLam (Pi (v,a) b) ctx avoid = sized $ \size -> genTargetLam' size
   where
     genTargetLam' size | size <= 0 = mzero
     genTargetLam' _ = do
-      body <- genTarget b ((v,a):ctx)
+      body <- genTarget b ((v,a):ctx) (v:avoid)
       return (Lam (v,a) body)
-genTargetLam _ ctx = mzero
+genTargetLam _ ctx _ = mzero
 
-pickGen xs target ctx = freqBacktrack $ ((mkGen <$>) <$>) xs
-  where mkGen gen = scale (subtract 1) $ gen target ctx
+genTargetApp :: GenTerm
+genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (size `div` 30)
+  where
+    genTargetApp' size
+      | size <= 0 = mzero
+      | otherwise = do
+          argTy <- maxSize 1 $ genTarget Ty ctx avoid
+          let x = fresh ctx (avoid ++ allVars argTy ++ allVars target)
+          --TODO: how do we handle substitution?
+          a <- genTarget (Pi (x,argTy) target) ctx (x:avoid)
+          assert (not $ elem x (freeVars a)) "x used in a"
+          b <- genTarget argTy ctx (x:avoid)
+          assert (not $ elem x (freeVars b)) "x used in b"
+          return (App a b)
+    maxSize s g = scale (`min` s) g
 
---TODO: optimise picking of rules? Probably not needed (e.g. Var -> always targetVariable)
+pickGen xs target ctx avoid = do
+  target' <- case runTC $ whnf target of
+    Left e -> error $ "whnf failed during generation: " <> show e
+    Right t -> return t
+
+  res <- freqBacktrack $ ((mkGen target' <$>) <$>) xs
+  assertRight (runTC $ mSet ctx >> hasType target' (Type Ty)) "target is not a type"
+  assertRight
+    (runTC $ mSet ctx >> hasType res (Type target'))
+    $  "genereated term doesn't have target type:\n"
+    <> "\nthe term\n"
+    <> show res
+    <> "\nshould have type\n"
+    <> show target'
+  return res
+
+  where mkGen tgt gen = scale (subtract 1) $ gen tgt ctx avoid
+
 genTarget :: GenTerm
 genTarget = pickGen
-           [ (2, genTargetTy)
-           , (1, genTargetVar)
-           , (3, genTargetPi)
-           , (5, genTargetLam)
+           [ (20, genTargetTy)
+           , (10, genTargetVar)
+           , (30, genTargetPi)
+           , (50, genTargetLam)
+           , (10, genTargetApp)
            ]
---TODO: add app rule
 --TODO: add indir rule
 
-genTermAndType :: forall v. Gen (Maybe (Term, Term))
-genTermAndType = scale (+1) . runBackTrackGen $ do
-  ty <- genTarget Ty []
-  --Not backtracking over a type that's been genTargetd... The type
-  --must be correct; can you always genTarget a term for it?
-  term <- genTarget ty []
-  return (ty, term)
+genTermAndType :: Gen (Term, Term)
+genTermAndType = scale (+1) . backtrackUntilSuccess $ do
+  ty <- scale (`div` 4) $ genTarget Ty [] []
+  term <- scale (`div` 2) $ genTarget ty [] []
+  return (term, ty)
 
-genTerm :: Gen (Term)
-genTerm = fst . fromJust <$> genTermAndType
+backtrackUntilSuccess :: BackTrackGen a -> Gen a
+backtrackUntilSuccess gen = do
+  runBackTrackGen gen >>= \case
+    Nothing -> backtrackUntilSuccess gen
+    Just x -> return x
+
+genTerm :: Gen Term
+genTerm = fst <$> genTermAndType
 
 prop_wellTyped = wellTyped
 
@@ -105,7 +146,6 @@ instance Arbitrary (Term) where
                                  , body' <- shrink body]
       shrink' _ = []
 
--- TODO: Terms WellTyped
 -- | A 'WellTyped' is a 'Term' that is well-typed.
 newtype WellTyped = WellTyped Term
   deriving (Eq, Show)
@@ -122,4 +162,4 @@ instance Arbitrary Name where
   arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
 
 instance Arbitrary Type where
-  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty [])
+  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty [] [])
