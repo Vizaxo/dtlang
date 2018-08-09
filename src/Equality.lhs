@@ -170,6 +170,7 @@ argument.
 > whnf (App a b) =
 >   whnf a >>= \case
 >     (Lam (x,tyX) body) -> whnf $ subst x b body
+>     (Var x) -> return (App a b)
 >     t -> throwError $ InternalError
 >       [PS "Trying to apply the non-function type" ,PT t
 >       ,PS "to the argument", PT b]
