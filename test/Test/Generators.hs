@@ -62,7 +62,7 @@ genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (size `div` 30)
     genTargetApp' size
       | size <= 0 = mzero
       | otherwise = do
-          argTy <- maxSize 1 $ genTarget Ty ctx avoid
+          argTy <- maxSize 2 $ genTarget Ty ctx avoid
           let x = fresh ctx (avoid ++ allVars argTy ++ allVars target)
           --TODO: how do we handle substitution?
           a <- genTarget (Pi (x,argTy) target) ctx (x:avoid)
@@ -73,8 +73,8 @@ genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (size `div` 30)
     maxSize s g = scale (`min` s) g
 
 pickGen xs target ctx avoid = do
-  target' <- case runTC $ whnf target of
-    Left e -> error $ "whnf failed during generation: " <> show e
+  target' <- case runTC $ mSet ctx >> whnf target of
+    Left e -> error $ "whnf failed during generation: " <> show e <> "in the context " <> show ctx <> "\nWhen trying to whnf " <> show target
     Right t -> return t
 
   res <- freqBacktrack $ ((mkGen target' <$>) <$>) xs
@@ -82,10 +82,10 @@ pickGen xs target ctx avoid = do
   assertRight
     (runTC $ mSet ctx >> hasType res (Type target'))
     $  "genereated term doesn't have target type:\n"
-    <> "\nthe term\n"
-    <> show res
-    <> "\nshould have type\n"
-    <> show target'
+    <> "the term\n"
+    <> show res <> "\n"
+    <> "should have type\n"
+    <> show target' <> "\n"
   return res
 
   where mkGen tgt gen = scale (subtract 1) $ gen tgt ctx avoid
