@@ -56,6 +56,11 @@ dataTypes :: TestTree
 dataTypes = testGroup "data types"
   [ testCase "duplicate constructors are disallowed" test_dupConstructorsDisallowed
   , testCase "a constructor with a return type that is not the datatype is disallowed" test_constructorNotReturnDataDisallowed
+  , testCase "a constructor can't access the type variables defined in the data type declaration" test_constructorReferenceVarInData
+  , testCase "Nat is well-typed" test_nat
+  , testCase "List is well-typed" test_list
+  , testCase "Vect is well-typed" test_vect
+  , testCase "a constructor can't access variables defined in another constructor" test_constructorReferenceVarInOtherConstructor
   ]
 
 equality :: TestTree

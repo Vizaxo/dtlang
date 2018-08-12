@@ -45,6 +45,15 @@ The context can be extended with a new binding.
 >   mModify (b:)
 >   ma
 
+Run a TC computation without extending the context of the parent.
+
+> isolateCtx :: TC a -> TC a
+> isolateCtx ma = do
+>   ctx <- mGet @Context
+>   res <- ma
+>   mSet ctx
+>   return res
+
 We need a way to generate variables that are guaranteed to be fresh.
 
 We get the name to use, then update the next variable that will be

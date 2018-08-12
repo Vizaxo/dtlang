@@ -57,25 +57,28 @@ typeCheck (Let Rec bindings body) = do
 typeCheckData :: DataDecl -> TC ()
 typeCheckData (name, (Type ty), cs) = do
   nameUnique name
-  ty `betaEq` Ty
+  isolateCtx $ ty `hasType` Type Ty
   mModify ((name,ty):)
   bs <- mapM typeCheckC cs
   mapM (\b@(n,_) -> nameUnique n >> mModify (b:)) bs
   mModify (bs ++)
+
   where
     typeCheckC (c, (Type cTy)) = do
       cTy `hasType` (Type Ty)
       cTy' <- whnf cTy
       returnsData cTy'
       return (c, cTy)
+
       where
-        --TODO: for now this only deals with datatypes with type Ty
-        --Add supports for datatypes with Pi types
-        returnsData = whnf >=> returnsData'
-        returnsData' (Pi (_,_) ret) = returnsData ret
-        returnsData' (Var retName)
+        returnsData = whnf >=> returnTy >=> whnf >=> appData
+        returnTy (Pi (_,_) ret) = whnf ret >>= returnTy
+        returnTy t = return t
+
+        appData (App a b) = whnf a >>= appData
+        appData (Var retName)
           | retName == name = success
-        returnsData' _ =
+        appData _ =
           throwError $ TypeError [PS "Constructor", PN c, PS "doesn't return the type", PN name]
 
 -- | Check that a given name does not already occur in the context.

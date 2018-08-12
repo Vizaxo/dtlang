@@ -52,6 +52,50 @@ nat = (Specified "Nat"
            Pi (Specified "x",Var (Specified "Nat"))
              (Var (Specified "Nat")))])
 
+var = Specified
+v = Var . var
+
+natT = v "Nat"
+zero = v "Zero"
+succ' = v "Succ"
+
+list :: DataDecl
+list = (Specified "List"
+      , Type (Pi (Specified "a", Ty) Ty)
+        -- Nil : List a
+      , [(Specified "Nil", Type $
+           Pi (Specified "a", Ty) $
+            App (Var (Specified "List")) (Var (Specified "a")))
+        -- Cons : (a:Ty) -> (x:a) -> (xs:List a) -> List a
+        ,(Specified "Cons", Type $
+           Pi (Specified "a",Ty) $
+            Pi (Specified "x",Var (Specified "a")) $
+             Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
+              App (Var (Specified "List")) (Var (Specified "a")))])
+
+listT = v "List"
+nil = v "Nil"
+cons = v "Cons"
+
+vect :: DataDecl
+vect = (Specified "Vect"
+      , Type (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", Ty) Ty))
+        -- VNil : Vect 0 a
+      , [(Specified "VNil", Type $
+           Pi (Specified "a", Ty) $
+            (Var (Specified "Vect")) `App` (Var (Specified "Zero")) `App` (Var (Specified "a")))
+        -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect n a) -> Vect (S n) a
+        ,(Specified "VCons", Type $
+           Pi (Specified "a",Ty) $
+            Pi (Specified "n",(Var (Specified "Nat"))) $
+             Pi (Specified "x",Var (Specified "a")) $
+              Pi (Specified "xs",(Var (Specified "Vect")) `App` (Var (Specified "n")) `App` (Var (Specified "a"))) $
+               (Var (Specified "Vect")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))) `App` (Var (Specified "a")))])
+
+vectT = v "Vect"
+vnil = v "VNil"
+vcons = v "VCons"
+
 zeroT :: Term
 zeroT = Var (Specified "Zero")
 
