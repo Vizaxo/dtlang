@@ -36,6 +36,7 @@ location in the source code.
 >   | PN Name
 >   | PS String
 >   | PC Context
+>   | PD DataDecl
 >   deriving (Eq, Show)
 
 The context can be extended with a new binding.

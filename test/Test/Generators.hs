@@ -167,4 +167,5 @@ instance Arbitrary Type where
   arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty emptyCtx [])
 
 instance Arbitrary Context where
-  arbitrary = Context <$> arbitrary <*> arbitrary
+  --TODO: arbitrary data declarations
+  arbitrary = Context <$> arbitrary <*> pure []

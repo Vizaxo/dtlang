@@ -41,3 +41,9 @@ assertRight (Left e') e = error $ e <> show e'
 instance MonadError e m => MonadError e (MultiStateT s m) where
   throwError = lift . throwError
   catchError (MultiStateT ma) h = MultiStateT $ StateT $ \s -> runStateT ma s `catchError` \e -> runMultiStateT s (h e)
+
+foldr1M f xs = foldl1 f' return xs
+  where f' k x z = f x z >>= k
+
+adjacentsSatisfyM p (x:y:xs) = p x y >> adjacentsSatisfyM p (y:xs)
+adjacentsSatisfyM p _ = return ()

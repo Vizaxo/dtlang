@@ -61,6 +61,7 @@ dataTypes = testGroup "data types"
   , testCase "List is well-typed" test_list
   , testCase "Vect is well-typed" test_vect
   , testCase "a constructor can't access variables defined in another constructor" test_constructorReferenceVarInOtherConstructor
+  , testCase "pattern matching on natural numbers type-checks" test_patternMatchNat
   ]
 
 equality :: TestTree

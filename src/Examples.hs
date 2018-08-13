@@ -45,12 +45,13 @@ pair = (Lam (toEnum 0, Ty)
 
 
 nat :: DataDecl
-nat = (Specified "Nat"
-      , Type Ty
-      , [(Specified "Zero", Type $ Var (Specified "Nat"))
-        ,(Specified "Succ", Type $
-           Pi (Specified "x",Var (Specified "Nat"))
-             (Var (Specified "Nat")))])
+nat = DataDecl
+  (Specified "Nat")
+  (Type Ty)
+  ([(Specified "Zero", Type $ Var (Specified "Nat"))
+    ,(Specified "Succ", Type $
+       Pi (Specified "x",Var (Specified "Nat"))
+         (Var (Specified "Nat")))])
 
 var = Specified
 v = Var . var
@@ -60,37 +61,39 @@ zero = v "Zero"
 succ' = v "Succ"
 
 list :: DataDecl
-list = (Specified "List"
-      , Type (Pi (Specified "a", Ty) Ty)
-        -- Nil : List a
-      , [(Specified "Nil", Type $
-           Pi (Specified "a", Ty) $
-            App (Var (Specified "List")) (Var (Specified "a")))
-        -- Cons : (a:Ty) -> (x:a) -> (xs:List a) -> List a
-        ,(Specified "Cons", Type $
-           Pi (Specified "a",Ty) $
-            Pi (Specified "x",Var (Specified "a")) $
-             Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
-              App (Var (Specified "List")) (Var (Specified "a")))])
+list = DataDecl
+  (Specified "List")
+  (Type (Pi (Specified "a", Ty) Ty))
+  -- Nil : List a
+  ([(Specified "Nil", Type $
+     Pi (Specified "a", Ty) $
+      App (Var (Specified "List")) (Var (Specified "a")))
+  -- Cons : (a:Ty) -> (x:a) -> (xs:List a) -> List a
+  ,(Specified "Cons", Type $
+     Pi (Specified "a",Ty) $
+      Pi (Specified "x",Var (Specified "a")) $
+       Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
+        App (Var (Specified "List")) (Var (Specified "a")))])
 
 listT = v "List"
 nil = v "Nil"
 cons = v "Cons"
 
 vect :: DataDecl
-vect = (Specified "Vect"
-      , Type (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", Ty) Ty))
-        -- VNil : Vect 0 a
-      , [(Specified "VNil", Type $
-           Pi (Specified "a", Ty) $
-            (Var (Specified "Vect")) `App` (Var (Specified "Zero")) `App` (Var (Specified "a")))
-        -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect n a) -> Vect (S n) a
-        ,(Specified "VCons", Type $
-           Pi (Specified "a",Ty) $
-            Pi (Specified "n",(Var (Specified "Nat"))) $
-             Pi (Specified "x",Var (Specified "a")) $
-              Pi (Specified "xs",(Var (Specified "Vect")) `App` (Var (Specified "n")) `App` (Var (Specified "a"))) $
-               (Var (Specified "Vect")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))) `App` (Var (Specified "a")))])
+vect = DataDecl
+  (Specified "Vect")
+  (Type (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", Ty) Ty)))
+  -- VNil : Vect 0 a
+  ([(Specified "VNil", Type $
+     Pi (Specified "a", Ty) $
+      (Var (Specified "Vect")) `App` (Var (Specified "Zero")) `App` (Var (Specified "a")))
+  -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect n a) -> Vect (S n) a
+   ,(Specified "VCons", Type $
+      Pi (Specified "a",Ty) $
+       Pi (Specified "n",(Var (Specified "Nat"))) $
+        Pi (Specified "x",Var (Specified "a")) $
+         Pi (Specified "xs",(Var (Specified "Vect")) `App` (Var (Specified "n")) `App` (Var (Specified "a"))) $
+          (Var (Specified "Vect")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))) `App` (Var (Specified "a")))])
 
 vectT = v "Vect"
 vnil = v "VNil"
@@ -105,3 +108,8 @@ succT = Var (Specified "Succ")
 three :: Term
 three = succT `App` succT `App` succT `App` zeroT
 
+patternMatchNat
+  = Lam (var "n", natT) $
+     Case (v "n")
+      [CaseTerm (var "Zero") [] (succ' `App` zero)
+      ,CaseTerm (var "Succ") [(var "n", natT)] zero]

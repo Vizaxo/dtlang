@@ -9,6 +9,8 @@ import Utils
 import Control.Monad.Except
 import Control.Monad.Trans.MultiState
 import Data.List
+import Data.Ord
+import Control.Lens hiding (Context)
 
 -- | Predicate of whether a given term is well-typed in the given context.
 wellTyped :: Term -> Bool
@@ -51,6 +53,36 @@ typeCheck (Let Rec bindings body) = do
   --TODO: Need to substitute bindings? What if non-terminating?
   --      Use context returned from TC monad too?
   notType body
+typeCheck (Case e xs) = do
+  t <- typeCheck e
+  dataname <- dataTypeReturn t
+  datatype <- lookupData dataname
+  --TODO: use sets instead of lists
+  let datactors = over _2 unType <$> (sortBy (comparing fst) $ constructors datatype)
+  let casectors = sortBy (comparing constructor) $ xs
+  caseTys <- zipWithM (tcCase datatype) datactors casectors
+  --TODO: empty cases
+  adjacentsSatisfyM betaEq caseTys
+  --TODO: check if contexts are properly propogated
+  whnf $ head caseTys
+
+  where
+    tcCase datatype (ctora, ty) (CaseTerm ctorb bindings expr)
+      | ctora /= ctorb = throwError $ TypeError [PS "Constructors for datatype", PD datatype, PS "not matched by case expression", PT (Case e xs)]
+      | otherwise = do
+          ty' <- whnf ty
+          bindings' <- mapM (\(n,ty) -> (n,) <$> whnf ty) bindings
+          expr' <- whnf expr
+          tcCase' ty' bindings expr'
+    tcCase' (Pi (x, xTy) ret) ((y,yTy):bs) expr = do
+      --TODO: better type errors
+      xTy `betaEq` yTy
+      extendCtx (y,yTy) $ tcCase' ret bs expr
+    tcCase' ty [] expr = do
+      hasType expr (Type ty)
+      return ty
+    tcCase' _ _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
+
 
 -- | Type-check a data declaration. If successful, it adds the type
 -- and constructors to the context.
@@ -68,19 +100,21 @@ typeCheckData d@(DataDecl name (Type ty) cs) = do
     typeCheckC (c, (Type cTy)) = do
       cTy `hasType` (Type Ty)
       cTy' <- whnf cTy
-      returnsData cTy'
+      returnsData name cTy'
       return (c, cTy)
 
-      where
-        returnsData = whnf >=> returnTy >=> whnf >=> appData
-        returnTy (Pi (_,_) ret) = whnf ret >>= returnTy
-        returnTy t = return t
+dataTypeReturn = whnf >=> returnTy >=> whnf >=> appData
 
-        appData (App a b) = whnf a >>= appData
-        appData (Var retName)
-          | retName == name = success
-        appData _ =
-          throwError $ TypeError [PS "Constructor", PN c, PS "doesn't return the type", PN name]
+returnsData name = dataTypeReturn >=> \n -> case (n == name) of
+  True -> success
+  False -> throwError $ TypeError [PS "Expected type constructor", PN name, PS ", got type constructor" , PN n]
+
+returnTy (Pi (_,_) ret) = whnf ret >>= returnTy
+returnTy t = return t
+
+appData (App a b) = whnf a >>= appData
+appData (Var retName) = return retName
+appData _ = throwError $ TypeError [PS "AppData not applied to a type constructed from a type constructor"]
 
 -- | Check that a given name does not already occur in the context.
 nameUnique :: Name -> TC ()

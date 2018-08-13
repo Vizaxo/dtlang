@@ -12,25 +12,28 @@ test_dupConstructorsDisallowed = assertLeft $ runTC $ typeCheckData dupConstruct
 
 dupConstructors :: DataDecl
 dupConstructors =
-  (Specified "data"
-    , Type Ty
-    , [(Specified "dupConstructor", Type $ Var (Specified "data"))
-      ,(Specified "dupConstructor", Type $ Var (Specified "data"))])
+  DataDecl
+  (Specified "data")
+  (Type Ty)
+  ([(Specified "dupConstructor", Type $ Var (Specified "data"))
+   ,(Specified "dupConstructor", Type $ Var (Specified "data"))])
 
 test_constructorNotReturnDataDisallowed = assertLeft $ runTC $ typeCheckData badConstructorType
 
 badConstructorType :: DataDecl
 badConstructorType =
-  (Specified "data"
-  , Type Ty
-    , [(Specified "invalidTypeConstructor", Type $ Ty)])
+  DataDecl
+  (Specified "data")
+  (Type Ty)
+  ([(Specified "invalidTypeConstructor", Type $ Ty)])
 
 badVarReference :: DataDecl
 badVarReference =
-  (Specified "Vect"
-  ,Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty))
+  DataDecl
+  (Specified "Vect")
+  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
    -- VNil : Vect 0 a
-  ,[(Specified "VNil", Type $
+  ([(Specified "VNil", Type $
       Pi (Specified "a", Ty) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
    -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
@@ -48,10 +51,11 @@ test_constructorReferenceVarInData
 
 badVarReferenceOtherCtor :: DataDecl
 badVarReferenceOtherCtor =
-  (Specified "Vect"
-  ,Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty))
+  DataDecl
+  (Specified "Vect")
+  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
    -- VNil : Vect 0 a
-  ,[(Specified "VNil", Type $
+  ([(Specified "VNil", Type $
       Pi (Specified "a", Ty) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
    -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
@@ -62,9 +66,10 @@ badVarReferenceOtherCtor =
 
 badVarReferenceOtherCtorRev :: DataDecl
 badVarReferenceOtherCtorRev =
-  (Specified "Vect"
-  ,Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty))
-  ,[(Specified "VCons", Type $
+  DataDecl
+  (Specified "Vect")
+  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
+  ([(Specified "VCons", Type $
       Pi (Specified "x",Var (Specified "a")) $
        Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
         (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))))
@@ -91,3 +96,6 @@ test_vect = assertRight $ runTC $ typeCheckData nat >> typeCheckData vect
 
 assertLeft = assertBool "Expected a left; got a right" . isLeft
 assertRight = assertBool "Expected a right; got a left" . isRight
+
+test_patternMatchNat
+  = assertRight $ runTC $ typeCheckData nat >> typeCheck patternMatchNat

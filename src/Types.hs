@@ -39,11 +39,16 @@ data Term = Var Name                           -- ^Variable
             | Case Term [CaseTerm]             -- ^Case expr of terms
             deriving (Eq, Show)
 
-type CaseTerm = (Constructor, [Binding], Type)
+data CaseTerm = CaseTerm
+  { constructor :: Constructor
+  , bindings :: [Binding]
+  , expression :: Term
+  }
+  deriving (Eq, Show)
 
 -- | 'Type' is a synonym for 'Term', which can have its own
 -- 'Arbitrary' implementation.
-newtype Type = Type Term
+newtype Type = Type { unType :: Term }
   deriving (Eq, Show)
 
 infixl 3 `App`
@@ -60,11 +65,11 @@ data Context = Context
   deriving (Eq, Show)
 
 newtype GenVar = GenVar Int
-  deriving (Eq, Show, Enum)
+  deriving (Eq, Ord, Show, Enum)
 
 data Name = Specified String
           | Generated GenVar
-          deriving (Eq, Show)
+          deriving (Eq, Ord, Show)
 
 instance Enum Name where
   toEnum = Generated . toEnum

@@ -49,6 +49,7 @@ extra-deps:
 - transformers-0.5.5.0
 - multistate-0.8.0.0
 - random-1.1
+- lens-4.17
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

@@ -18,7 +18,7 @@ maxNesting (Let _ bindings body) = max (maxNesting body) bindNesting
   --recursive let bindings can't be inlined, so this is good enough without
   --being over-complicated.
 maxNesting (Case t branches) = max (maxNesting t) caseNesting
-  where caseNesting = maximumOr 0 $ fmap (maxNesting . \(_,_,(Type x))->x) branches
+  where caseNesting = maximumOr 0 $ fmap (maxNesting . \(CaseTerm _ _ x)->x) branches
 
 -- | Substitute all free occurances of the given variable for the
 --   second argument, in the third argument.
