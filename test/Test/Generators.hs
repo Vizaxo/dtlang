@@ -9,6 +9,7 @@ import TypeCheck
 import Types
 import Utils
 
+import Control.Lens hiding (Context, elements)
 import Control.Monad
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.MultiState
@@ -59,7 +60,7 @@ genTargetLam (Pi (v,a) b) ctx avoid = sized $ \size -> genTargetLam' size
 genTargetLam _ ctx _ = mzero
 
 genTargetApp :: GenTerm
-genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (size `div` 30)
+genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (min size 3)
   where
     genTargetApp' size
       | size <= 0 = mzero
@@ -79,7 +80,7 @@ pickGen xs target ctx avoid = do
     Left e -> error $ "whnf failed during generation: " <> show e <> "in the context " <> show ctx <> "\nWhen trying to whnf " <> show target
     Right t -> return t
 
-  res <- freqBacktrack $ ((mkGen target' <$>) <$>) xs
+  res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
   assertRight (runTC $ mSet ctx >> hasType target' (Type Ty)) "target is not a type"
   assertRight
     (runTC $ mSet ctx >> hasType res (Type target'))
@@ -98,7 +99,7 @@ genTarget = pickGen
            , (10, genTargetVar)
            , (30, genTargetPi)
            , (50, genTargetLam)
-           , (10, genTargetApp)
+           , (0, genTargetApp)
            ]
 --TODO: add indir rule
 
