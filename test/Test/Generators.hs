@@ -26,15 +26,17 @@ elements' [] = mzero
 elements' xs = elements xs
 
 genTargetVar :: GenTerm
-genTargetVar target ctx _ = sized $ \size -> if size < (-1) then mzero else elements' $ Var . fst <$> filter (isBetaEq target . snd) ctx
+genTargetVar target ctx _ = sized $ \size -> if size < (-1)
+  then mzero
+  else elements' $ Var . fst <$> filter (isBetaEq target . snd) (getCtx ctx)
 
 fresh :: Context -> [Name] -> Name
-fresh ctx avoid = toEnum $ 1 + (maximumOr (-1) $ fromEnum <$> (fst <$> ctx) ++ avoid)
+fresh ctx avoid = toEnum $ 1 + (maximumOr (-1) $ fromEnum <$> (fst <$> getCtx ctx) ++ avoid)
 
 prop_GenFreshIsFresh :: Context -> [Name] -> Bool
 prop_GenFreshIsFresh ctx avoid =
   let v = fresh ctx avoid
-  in not (elem v ((fst <$> ctx) ++ avoid))
+  in not (elem v ((fst <$> getCtx ctx) ++ avoid))
 
 genTargetPi :: GenTerm
 genTargetPi Ty ctx avoid = sized $ \size -> genTargetPi' size
@@ -43,7 +45,7 @@ genTargetPi Ty ctx avoid = sized $ \size -> genTargetPi' size
     genTargetPi' _ = do
       let v = fresh ctx avoid
       a <- genTarget Ty ctx (v:avoid)
-      b <- genTarget Ty ((v,a):ctx) (v:avoid)
+      b <- genTarget Ty (insertCtx v a ctx) (v:avoid)
       return (Pi (v,a) b)
 genTargetPi _ ctx _ = mzero
 
@@ -52,7 +54,7 @@ genTargetLam (Pi (v,a) b) ctx avoid = sized $ \size -> genTargetLam' size
   where
     genTargetLam' size | size <= 0 = mzero
     genTargetLam' _ = do
-      body <- genTarget b ((v,a):ctx) (v:avoid)
+      body <- genTarget b (insertCtx v a ctx) (v:avoid)
       return (Lam (v,a) body)
 genTargetLam _ ctx _ = mzero
 
@@ -102,8 +104,8 @@ genTarget = pickGen
 
 genTermAndType :: Gen (Term, Term)
 genTermAndType = scale (+1) . backtrackUntilSuccess $ do
-  ty <- scale (`div` 4) $ genTarget Ty [] []
-  term <- scale (`div` 2) $ genTarget ty [] []
+  ty <- scale (`div` 4) $ genTarget Ty emptyCtx []
+  term <- scale (`div` 2) $ genTarget ty emptyCtx []
   return (term, ty)
 
 backtrackUntilSuccess :: BackTrackGen a -> Gen a
@@ -162,4 +164,7 @@ instance Arbitrary Name where
   arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
 
 instance Arbitrary Type where
-  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty [] [])
+  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty emptyCtx [])
+
+instance Arbitrary Context where
+  arbitrary = Context <$> arbitrary <*> arbitrary

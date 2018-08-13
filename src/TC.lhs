@@ -41,8 +41,8 @@ location in the source code.
 The context can be extended with a new binding.
 
 > extendCtx :: Binding -> TC a -> TC a
-> extendCtx b ma = do
->   mModify (b:)
+> extendCtx (n,v) ma = do
+>   mModify (insertCtx n v)
 >   ma
 
 Run a TC computation without extending the context of the parent.
@@ -63,7 +63,7 @@ used.
 > fresh avoid = do
 >   v <- mGet @GenVar
 >   ctx <- mGet @Context
->   let existingGens = catMaybes $ (fromEnum <$>) . getGen <$> (fst <$> ctx) ++ avoid
+>   let existingGens = catMaybes $ (fromEnum <$>) . getGen <$> (fst <$> (getCtx ctx)) ++ avoid
 >   let nextVar = toEnum $ max (fromEnum v) (1 + maximumOr (-1) (existingGens))
 >   mSet $ succ nextVar
 >   return $ Generated nextVar
@@ -80,7 +80,7 @@ context.
 >   case elem z existing of
 >     True -> throwError $ InternalError []
 >     False -> return ()
->   case lookup z ctx of
+>   case lookupCtx z ctx of
 >     Nothing -> return ()
 >     Just _ -> throwError $ InternalError []
 
@@ -99,7 +99,26 @@ This can be useful to add more context to error messages.
 We start with an empty context.
 
 > emptyCtx :: Context
-> emptyCtx = []
+> emptyCtx = Context [] []
+
+> lookupCtx :: Name -> Context -> Maybe Term
+> lookupCtx n (Context ctx _) = lookup n ctx
+
+> insertCtx :: Name -> Term -> Context -> Context
+> insertCtx n t (Context ctx ds) = Context ((n,t):ctx) ds
+
+> insertDataDecl :: DataDecl -> Context -> Context
+> insertDataDecl d (Context ctx ds) = Context ctx (d:ds)
+
+> lookupData' :: Name -> Context -> Maybe DataDecl
+> lookupData' n (Context _ ds) = listToMaybe $ filter (\(DataDecl n' _ _) -> n == n') ds
+
+> lookupData :: Name -> TC DataDecl
+> lookupData n = do
+>   ctx <- mGet
+>   case lookupData' n ctx of
+>     Nothing -> throwError $ TypeError [PS "Type", PN n, PS "not found in context."]
+>     Just d -> return d
 
 We can run the TC monad. If a TypeError has occured elsewhere this
 will be returned. Otherwise, we get the pure value back.

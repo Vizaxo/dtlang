@@ -39,8 +39,8 @@ Two lambda or pi expressions are alpha equal if
 
 > lamA@(Lam (x,tyX) a) `alphaEq` lamB@(Lam (y,tyY) b) = do
 >   tyX `alphaEq` tyY
->   mModify ((x,tyX):)
->   mModify ((y,tyY):)
+>   mModify (insertCtx x tyX)
+>   mModify (insertCtx y tyY)
 >   z <- fresh (allVars lamA ++ allVars lamB)
 >   ctx <- mGet @Context
 >   let a' = subst x (Var z) a
@@ -48,8 +48,8 @@ Two lambda or pi expressions are alpha equal if
 >   a' `alphaEq` b'
 > piA@(Pi (x,tyX) a) `alphaEq` piB@(Pi (y,tyY) b) = do
 >   tyX `alphaEq` tyY
->   mModify ((x,tyX):)
->   mModify ((y,tyY):)
+>   mModify (insertCtx x tyX)
+>   mModify (insertCtx y tyY)
 >   z <- fresh (allVars piA ++ allVars piB)
 >   let a' = subst x (Var z) a
 >   let b' = subst y (Var z) b
@@ -105,8 +105,8 @@ sub-structures.
 
 > lamA@(Lam (x,tyX) a) `betaEq'` lamB@(Lam (y,tyY) b) = do
 >   tyX `betaEq` tyY
->   mModify ((x,tyX):)
->   mModify ((y,tyY):)
+>   mModify (insertCtx x tyX)
+>   mModify (insertCtx y tyY)
 >   z <- fresh (allVars lamA ++ allVars lamB)
 >   ctx <- mGet @Context
 >   let a' = subst x (Var z) a
@@ -114,8 +114,8 @@ sub-structures.
 >   a' `betaEq` b'
 > piA@(Pi (x,tyX) a) `betaEq'` piB@(Pi (y,tyY) b) = do
 >   tyX `betaEq` tyY
->   mModify ((x,tyX):)
->   mModify ((y,tyY):)
+>   mModify (insertCtx x tyX)
+>   mModify (insertCtx y tyY)
 >   z <- fresh (allVars piA ++ allVars piB)
 >   let a' = subst x (Var z) a
 >   let b' = subst y (Var z) b

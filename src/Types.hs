@@ -9,10 +9,12 @@ type Program = ( [DataDecl] -- ^Data declarations
 
 -- | A data declaration has a name, a type, and a list of constructors.
 --   Each constructor has an associated type.
-type DataDecl = ( Name                  -- ^Datatype name
-                , Type                  -- ^Type of the datatype
-                , [(Constructor, Type)] -- ^Constructor declarations
-                )
+data DataDecl = DataDecl
+  { name :: Name                          -- ^Datatype name
+  , ty :: Type                            -- ^Type of the datatype
+  , constructors :: [(Constructor, Type)] -- ^Constructor declarations
+  }
+  deriving (Eq, Show)
 
 -- | A constructor is a name.
 type Constructor = Name
@@ -51,7 +53,11 @@ data IsRec = Rec | NoRec
            deriving (Eq, Show)
 
 -- | A map from variables to their types.
-type Context = [(Name, Term)]
+data Context = Context
+  { getCtx :: [(Name, Term)]
+  , datatypes :: [DataDecl]
+  }
+  deriving (Eq, Show)
 
 newtype GenVar = GenVar Int
   deriving (Eq, Show, Enum)

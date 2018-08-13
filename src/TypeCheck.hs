@@ -41,10 +41,10 @@ typeCheck Ty = return Ty
 typeCheck (Let NoRec bindings body) = do
   --Type-check the bindings without any of the bindings in scope
   sequence $ typeCheckBinding <$> bindings
-  mModify ((fst <$> bindings) ++)
+  mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
   substLet bindings <$> typeCheck body
 typeCheck (Let Rec bindings body) = do
-  mModify ((fst <$> bindings) ++)
+  mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
   --Type-check the bindings with the bindings recursively in scope
   sequence $ typeCheckBinding <$> bindings
   --Don't let body of a letrec be a type
@@ -55,13 +55,14 @@ typeCheck (Let Rec bindings body) = do
 -- | Type-check a data declaration. If successful, it adds the type
 -- and constructors to the context.
 typeCheckData :: DataDecl -> TC ()
-typeCheckData (name, (Type ty), cs) = do
+typeCheckData d@(DataDecl name (Type ty) cs) = do
+  --TODO: propogating the context like state is just wrong? go back to reader?
   nameUnique name
   isolateCtx $ ty `hasType` Type Ty
-  mModify ((name,ty):)
+  mModify (insertCtx name ty)
   bs <- mapM typeCheckC cs
-  mapM (\b@(n,_) -> nameUnique n >> mModify (b:)) bs
-  mModify (bs ++)
+  mapM_ (\(n,t) -> nameUnique n >> mModify (insertCtx n t)) bs
+  mModify $ insertDataDecl d
 
   where
     typeCheckC (c, (Type cTy)) = do
@@ -85,7 +86,7 @@ typeCheckData (name, (Type ty), cs) = do
 nameUnique :: Name -> TC ()
 nameUnique n = do
   ctx <- mGet @Context
-  case lookup n ctx of
+  case lookupCtx n ctx of
     Nothing -> success
     Just _ -> throwError $ TypeError [PS "The name", PN n, PS "is already defined"]
 
@@ -100,7 +101,7 @@ hasType t (Type target) = do
 
 fromCtx v = do
   ctx <- mGet
-  case lookup v ctx of
+  case lookupCtx v ctx of
     Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
     Just ty -> return ty
 
