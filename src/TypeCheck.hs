@@ -20,6 +20,9 @@ wellTyped = succeeded . typeCheck
 -- if the term is well-typed, and gives an error otherwise.
 typeCheck :: Term -> TC Term
 typeCheck (Var v) = fromCtx v
+typeCheck (Ctor c args) = do
+  (Type ty) <- lookupCtor c
+  tcArgList ty args
 typeCheck (Lam (x,xTy) body) = do
   typeCheck xTy >>= whnf >>= \case
     Ty -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
@@ -38,13 +41,13 @@ typeCheck (App a b) =
       bTy <- typeCheck b
       extendTypeError (betaEq bTy xTy) [PS "When type-checking", PT (App a b)]
       return (subst x b ret)
-    _ -> throwError $ TypeError [PS "Trying to apply a non-function type."]
+    t -> throwError $ TypeError [PS "Trying to apply a non-function type in the term", PT (App t b)]
 typeCheck Ty = return Ty
 typeCheck (Let NoRec bindings body) = do
   --Type-check the bindings without any of the bindings in scope
   sequence $ typeCheckBinding <$> bindings
   mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
-  substLet bindings <$> typeCheck body
+  substBindings bindings <$> typeCheck body
 typeCheck (Let Rec bindings body) = do
   mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
   --Type-check the bindings with the bindings recursively in scope
@@ -55,13 +58,13 @@ typeCheck (Let Rec bindings body) = do
   notType body
 typeCheck (Case e xs) = do
   t <- typeCheck e
-  dataname <- dataTypeReturn t
-  datatype <- lookupData dataname
+  dataname <- appData t
+  datatype@(DataDecl name ty ctors) <- lookupData dataname
   --TODO: use sets instead of lists
-  let datactors = over _2 unType <$> (sortBy (comparing fst) $ constructors datatype)
+  let datactors = over _2 unType <$> (sortBy (comparing fst) ctors)
   let casectors = sortBy (comparing constructor) $ xs
   caseTys <- zipWithM (tcCase datatype) datactors casectors
-  --TODO: empty cases
+  --TODO: check if empty cases work
   adjacentsSatisfyM betaEq caseTys
   --TODO: check if contexts are properly propogated
   whnf $ head caseTys
@@ -71,17 +74,20 @@ typeCheck (Case e xs) = do
       | ctora /= ctorb = throwError $ TypeError [PS "Constructors for datatype", PD datatype, PS "not matched by case expression", PT (Case e xs)]
       | otherwise = do
           ty' <- whnf ty
-          bindings' <- mapM (\(n,ty) -> (n,) <$> whnf ty) bindings
-          expr' <- whnf expr
-          tcCase' ty' bindings expr'
-    tcCase' (Pi (x, xTy) ret) ((y,yTy):bs) expr = do
-      --TODO: better type errors
-      xTy `betaEq` yTy
-      extendCtx (y,yTy) $ tcCase' ret bs expr
-    tcCase' ty [] expr = do
-      hasType expr (Type ty)
-      return ty
-    tcCase' _ _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
+          bindings' <- mapM (traverseOf _2 whnf) bindings
+          tcArgList ty' (snd <$> bindings')
+          foldl (flip extendCtx) (typeCheck expr) bindings'
+
+-- | Check that a list of arguments could be applied to a term with a
+-- given Pi type, and return the value that would be returned as a
+-- result of this application.
+tcArgList (Pi (x, xTy) ret) (yTy:bs) = do
+  --TODO: better type errors
+  xTy `betaEq` yTy
+  extendCtx (x,xTy) $ tcArgList ret bs
+tcArgList ty [] = do
+  return ty
+tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
 
 
 -- | Type-check a data declaration. If successful, it adds the type
@@ -138,10 +144,6 @@ fromCtx v = do
   case lookupCtx v ctx of
     Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
     Just ty -> return ty
-
--- | Helper function to substitute the bindings of a let expression into the body.
-substLet :: [(Binding, Term)] -> Term -> Term
-substLet xs body = foldr (\((v,_),val) term -> subst v val term) body xs
 
 -- | Returns the term's type if the given term is not a type; throws
 -- an error otherwise.

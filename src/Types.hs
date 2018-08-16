@@ -30,14 +30,15 @@ type Binding = (Name, Term)
 
 -- | The term datatype for the language, parameterised by the type of
 --   its variables.
-data Term = Var Name                           -- ^Variable
-            | Lam Binding Term                 -- ^Lambda var body
-            | Pi Binding Term                  -- ^Pi var return
-            | App Term Term                    -- ^Application
-            | Ty                               -- ^Type:Type
-            | Let IsRec [(Binding, Term)] Term -- ^Let bindings in body
-            | Case Term [CaseTerm]             -- ^Case expr of terms
-            deriving (Eq, Show)
+data Term = Var Name                         -- ^Variable
+          | Ctor Constructor [Term]          -- ^Fully applied constructor
+          | Lam Binding Term                 -- ^Lambda var body
+          | Pi Binding Term                  -- ^Pi var return
+          | App Term Term                    -- ^Application
+          | Ty                               -- ^Type:Type
+          | Let IsRec [(Binding, Term)] Term -- ^Let bindings in body
+          | Case Term [CaseTerm]             -- ^Case expr of terms
+          deriving (Eq, Show)
 
 data CaseTerm = CaseTerm
   { constructor :: Constructor

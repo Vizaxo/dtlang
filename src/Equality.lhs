@@ -8,6 +8,7 @@
 > import Control.Monad.Except
 > import Control.Monad.Trans.MultiState
 > import Data.Either
+> import Data.Maybe
 > import Test.QuickCheck
 
 Two terms are syntactically equal if their structures and variable
@@ -61,6 +62,10 @@ them the same variable.
 
 > (Var x) `alphaEq` (Var y) = unless (x == y) $
 >   throwError $ TypeError [PS "The variables", PN x, PS "and", PN y, PS "are not equal."]
+
+> (Ctor c xs) `alphaEq` (Ctor d ys)
+>   | c == d = zipWithM_ alphaEq xs ys
+>   | otherwise = throwError $ TypeError [PS "The constructors", PN c, PS "and", PN d, PS "are not the same."]
 
 Ty is alpha-equal to Ty.
 
@@ -169,13 +174,67 @@ argument.
 
 > whnf (App a b) =
 >   whnf a >>= \case
->     (Lam (x,tyX) body) -> whnf $ subst x b body
->     (Var x) -> return (App a b)
->     t -> return t
 
-A non-application term is already in whnf.
+An application of a lambda is beta reduction.
+
+>     (Lam (x,tyX) body) -> whnf $ subst x b body
+
+Otherwise, it can't be reduced.
+
+>     t -> return (App t b)
+
+A case expression with a known scrutinee can be reduced by picking the
+appropriate branch.
+
+> whnf (Case e terms) =
+>   whnf e >>= \case
+>     Ctor c args -> do
+>       case getBranch c terms of
+>         Nothing -> throwError $ TypeError [PS "Non-exhastive patterns in", PT (Case e terms)]
+>         Just (CaseTerm _ bs body) -> return $ substBindings (zip bs args) body
+>     t -> return (Case t terms)
+
+A constructor can be eta-expanded, resulting in a lambda surrounding a
+fully applied 'Ctor'.
+
+If the variable is not a constructor, it cannot be reduced.
+
+> whnf (Var x) = do
+>   catchError
+>     (partiallyApplyCtor x)
+>     (\_ -> return (Var x))
+
+Any other term is already in whnf.
 
 > whnf t = return t
+
+Substitute a list of bindings into an expression.
+
+> substBindings :: [(Binding, Term)] -> Term -> Term
+> substBindings xs body = foldr (\((v,_),val) term -> subst v val term) body xs
+
+Select the branch of a case expression matching the given constructor.
+
+> getBranch :: Constructor -> [CaseTerm] -> Maybe CaseTerm
+> getBranch c = listToMaybe . filter (\(CaseTerm c' _ _) -> c == c')
+
+Convert a type to whnf.
+
+> whnfTy :: Type -> TC Term
+> whnfTy (Type t) = whnf t
+
+Eta-expand a constructor, so that constructors are always fully applied.
+The type is assumed to be in whnf.
+
+> partiallyApplyCtor :: Constructor -> TC Term
+> partiallyApplyCtor c = do
+>   (Type ty) <- lookupCtor c
+>   return $ partiallyApplyCtor' c ty []
+>   where
+>     partiallyApplyCtor' c (Pi (x,ty) ret) args
+>       = Lam (x,ty) (partiallyApplyCtor' c ret (Var x:args))
+>     partiallyApplyCtor' c _ args
+>       = Ctor c args
 
 Helper functions for using these equalities in different contexts
 

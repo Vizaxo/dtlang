@@ -121,6 +121,14 @@ We start with an empty context.
 >     Nothing -> throwError $ TypeError [PS "Type", PN n, PS "not found in context."]
 >     Just d -> return d
 
+> lookupCtor :: Constructor -> TC Type
+> lookupCtor c = do
+>   Context ctx ds <- mGet
+>   case listToMaybe $ catMaybes $ map findCtor ds of
+>     Nothing -> throwError $ TypeError [PS "No constructor named", PN c, PS "in context"]
+>     Just ty -> return ty
+>   where findCtor (DataDecl _ _ ctors) = lookup c ctors
+
 We can run the TC monad. If a TypeError has occured elsewhere this
 will be returned. Otherwise, we get the pure value back.
 

@@ -1,5 +1,6 @@
 module Test.DataTypes where
 
+import Equality
 import Examples
 import TC
 import Types
@@ -94,8 +95,35 @@ test_list = assertRight $ runTC $ typeCheckData list
 
 test_vect = assertRight $ runTC $ typeCheckData nat >> typeCheckData vect
 
-assertLeft = assertBool "Expected a left; got a right" . isLeft
-assertRight = assertBool "Expected a right; got a left" . isRight
+test_partiallyApplyCtorZero
+  = assertRightAlphaEq
+      (runTC $ typeCheckData nat >> (partiallyApplyCtor (var "Zero")))
+      (Ctor (Specified "Zero") [])
 
-test_patternMatchNat
+test_partiallyApplyCtorSucc
+  = assertRightAlphaEq
+      (runTC $ typeCheckData nat >> (partiallyApplyCtor (var "Succ")))
+      (Lam (Specified "n", Var (Specified "Nat")) (Ctor (Specified "Succ") [Var (Specified "n")]))
+
+test_patternMatchNatTypeCheck
   = assertRight $ runTC $ typeCheckData nat >> typeCheck patternMatchNat
+
+test_patternMatchNatWhnfZero
+  = assertRightAlphaEq
+      (runTC $ typeCheckData nat >> whnf (patternMatchNat `App` zero))
+      (succ' `App` zero)
+
+test_patternMatchNatWhnfOne
+  = assertRightAlphaEq
+      (runTC $ typeCheckData nat >> whnf (patternMatchNat `App` (succ' `App` zero)))
+      zero
+
+
+assertLeft = assertBool "Expected a left; got a right" . isLeft
+
+assertRight :: Show a => Either a b -> Assertion
+assertRight (Left e) = assertFailure $ "Expected a right; got Left " <> show e
+assertRight _ = return ()
+assertAlphaEq a b = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b)  (a `isAlphaEq` b)
+assertRightAlphaEq (Right a) b = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b) (a `isAlphaEq` b)
+assertRightAlphaEq _ _ = assertFailure "Terms are not both Right"

@@ -3,6 +3,7 @@ module Term where
 import Types
 import Utils
 
+import Data.Bifunctor
 import Data.List
 
 -- | Get the maximum nesting level of a term.
@@ -25,6 +26,7 @@ maxNesting (Case t branches) = max (maxNesting t) caseNesting
 subst :: Name -> Term -> Term -> Term
 subst v with (Var u) | v == u    = with
                      | otherwise = Var u
+subst v with (Ctor c args) = Ctor c (subst v with <$> args)
 subst v with lam@(Lam (u,uTy) body)
   | v == u    = lam --Variable is shadowed
   | otherwise = Lam (u,(subst v with uTy)) (subst v with body)
@@ -35,8 +37,19 @@ subst v with (App a b) = App (subst v with a) (subst v with b)
 subst v with Ty = Ty
 subst v with lett@(Let rec bindings body)
   | elem v (fst <$> fst <$> bindings) = lett --Variable is shadowed
-  | otherwise = Let rec (substBindings <$> bindings) (subst v with body)
-  where substBindings = \((u,uTy),val) -> ((u,subst v with uTy), subst v with val)
+  | otherwise = Let rec
+                  (bimap (substBinding v with) (subst v with) <$> bindings)
+                  (subst v with body)
+  --where substBinding = (\((u,uTy),val) -> ((u,subst v with uTy), subst v with val))
+subst v with (Case e terms) = Case (subst v with e) (substCaseTerm v with <$> terms)
+
+substCaseTerm :: Name -> Term -> CaseTerm -> CaseTerm
+substCaseTerm v with (CaseTerm c bs body)
+  = CaseTerm c (substBinding v with <$> bs) (subst v with body)
+
+substBinding :: Name -> Term -> (Name, Term) -> (Name, Term)
+substBinding v with (n, ty) | v == n = (n, ty)
+                            | otherwise = (n, subst v with ty)
 
 -- | Pretty-print a term.
 prettyPrint :: Term -> String
@@ -57,6 +70,7 @@ allVars t = freeVars t ++ boundVars t
 -- | Get a list of all the free variables in a term.
 freeVars :: Term -> [Name]
 freeVars (Var v) = [v]
+freeVars (Ctor c args) = concat (freeVars <$> args)
 freeVars (Lam (v,ty) body) = nub (freeVars body ++ freeVars ty) \\ [v]
 freeVars (Pi (v,a) ret) = nub (freeVars ret ++ freeVars a) \\ [v]
 freeVars (App a b) = nub $ freeVars a ++ freeVars b
@@ -67,6 +81,7 @@ freeVars (Let _ xs body) = nub (freeVars body) \\ fmap (fst . fst) (nub xs)
 -- | Get a list of all the bound variables in a term.
 boundVars :: Term -> [Name]
 boundVars (Var v) = []
+boundVars (Ctor c args) = concat (boundVars <$> args)
 boundVars (Lam (v,_) body) = v:boundVars body
 boundVars (Pi (v,_) ret) = v:boundVars ret
 boundVars (App a b) = boundVars a ++ boundVars b

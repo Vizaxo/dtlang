@@ -61,7 +61,11 @@ dataTypes = testGroup "data types"
   , testCase "List is well-typed" test_list
   , testCase "Vect is well-typed" test_vect
   , testCase "a constructor can't access variables defined in another constructor" test_constructorReferenceVarInOtherConstructor
-  , testCase "pattern matching on natural numbers type-checks" test_patternMatchNat
+  , testCase "partiallyApplyCtor properly converts Zero" test_partiallyApplyCtorZero
+  , testCase "partiallyApplyCtor properly converts Succ" test_partiallyApplyCtorSucc
+  , testCase "pattern matching on natural numbers type-checks" test_patternMatchNatTypeCheck
+  , testCase "pattern matching on zero evaluates correctly" test_patternMatchNatWhnfZero
+  , testCase "pattern matching on succ evaluates correctly" test_patternMatchNatWhnfOne
   ]
 
 equality :: TestTree
