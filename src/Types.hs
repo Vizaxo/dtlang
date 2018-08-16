@@ -40,6 +40,10 @@ data Term = Var Name                         -- ^Variable
           | Case Term [CaseTerm]             -- ^Case expr of terms
           deriving (Eq, Show)
 
+ty --> res = Pi ty res
+infixr 5 -->
+infixl 5 `App`
+
 data CaseTerm = CaseTerm
   { constructor :: Constructor
   , bindings :: [Binding]
@@ -51,8 +55,6 @@ data CaseTerm = CaseTerm
 -- 'Arbitrary' implementation.
 newtype Type = Type { unType :: Term }
   deriving (Eq, Show)
-
-infixl 3 `App`
 
 -- | Determines whether a let(rec) expression is a let or a letrec.
 data IsRec = Rec | NoRec

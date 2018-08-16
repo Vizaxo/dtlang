@@ -66,6 +66,9 @@ dataTypes = testGroup "data types"
   , testCase "pattern matching on natural numbers type-checks" test_patternMatchNatTypeCheck
   , testCase "pattern matching on zero evaluates correctly" test_patternMatchNatWhnfZero
   , testCase "pattern matching on succ evaluates correctly" test_patternMatchNatWhnfOne
+  , testCase "bad versions of sigma don't type check" test_badSigmasFailTC
+  , testCase "sigma type checks" test_sigmaTypeChecks
+  , testCase "void type checks" test_voidTypeChecks
   ]
 
 equality :: TestTree

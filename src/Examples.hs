@@ -113,3 +113,24 @@ patternMatchNat
      Case (v "n")
       [CaseTerm (var "Zero") [] (succ' `App` zero)
       ,CaseTerm (var "Succ") [(var "n", natT)] zero]
+
+void :: DataDecl
+void = DataDecl
+  (Specified "Void")
+  (Type Ty)
+  []
+
+sigma :: DataDecl
+sigma = DataDecl
+  (Specified "Sigma")
+  (Type $
+    (var "a", Ty)
+    --> (var "b", (var "x", v "a") --> Ty)
+    --> Ty)
+  [(var "MkSigma", Type $
+     (var "a", Ty)
+     --> (var "b", (var "ignored", v "a") --> Ty)
+     --> (var "x", v "a")
+     --> (var "ignored2", (v "b" `App` v "x"))
+     --> (v "Sigma" `App` v "a" `App` v "b")
+   )]

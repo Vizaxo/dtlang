@@ -127,3 +127,51 @@ assertRight _ = return ()
 assertAlphaEq a b = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b)  (a `isAlphaEq` b)
 assertRightAlphaEq (Right a) b = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b) (a `isAlphaEq` b)
 assertRightAlphaEq _ _ = assertFailure "Terms are not both Right"
+
+badSigmas :: [DataDecl]
+badSigmas = [
+  DataDecl
+  (Specified "Sigma")
+  (Type $
+    (var "a", Ty)
+    --> (var "b", (var "x", v "a") --> Ty)
+    --> Ty)
+  [(var "MkSigma", Type $
+     (var "a", Ty)
+     --> (var "b", (var "ignored", v "a") --> Ty)
+     --> (var "x", v "a")
+     --> (var "ignored2", (v "b" `App` v "x"))
+     --> (v "Sigma" `App` v "a" `App` (v "b" `App` v "x")))]
+  , DataDecl
+  (Specified "Sigma")
+  (Type $
+    (var "a", Ty)
+    --> (var "b", (var "x", v "a") --> Ty)
+    --> Ty)
+  [(var "MkSigma", Type $
+     (var "a", Ty)
+     --> (var "b", (var "ignored", v "a") --> Ty)
+     --> (var "x", v "a")
+     --> (var "ignored2", (v "b" `App` v "a"))
+     --> (v "Sigma" `App` v "a" `App` v "b"))]
+  , DataDecl
+  (Specified "Sigma")
+  (Type $
+    (var "a", Ty)
+    --> (var "b", (var "x", v "a") --> Ty)
+    --> Ty)
+  [(var "MkSigma", Type $
+     (var "a", Ty)
+     --> (var "b", (var "ignored", v "a") --> Ty)
+     --> (var "x", v "a")
+     --> (var "ignored2", v "b")
+     --> (v "Sigma" `App` v "a" `App` v "b"))]]
+
+test_badSigmasFailTC :: Assertion
+test_badSigmasFailTC
+  = mapM_ (assertLeft . runTC . typeCheckData) badSigmas
+
+--TODO: abstract this, check whole library of datatypes type-check
+test_sigmaTypeChecks = assertRight $ runTC $ typeCheckData sigma
+
+test_voidTypeChecks = assertRight $ runTC $ typeCheckData void
