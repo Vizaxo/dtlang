@@ -1,6 +1,7 @@
 module Types where
 
 import Utils
+import Data.Natural
 
 -- | A program is a list of data declarations, and top-level definitions.
 type Program = ( [DataDecl] -- ^Data declarations
@@ -35,7 +36,7 @@ data Term = Var Name                         -- ^Variable
           | Lam Binding Term                 -- ^Lambda var body
           | Pi Binding Term                  -- ^Pi var return
           | App Term Term                    -- ^Application
-          | Ty                               -- ^Type:Type
+          | Ty Natural                       -- ^Type universes
           | Let IsRec [(Binding, Term)] Term -- ^Let bindings in body
           | Case Term [CaseTerm]             -- ^Case expr of terms
           deriving (Eq, Show)

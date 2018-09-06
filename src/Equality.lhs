@@ -69,7 +69,8 @@ them the same variable.
 
 Ty is alpha-equal to Ty.
 
-> Ty `alphaEq` Ty = success
+> (Ty n) `alphaEq` (Ty m) | n == m = success
+>                         | otherwise = throwError $ TypeError [PS "Type universes", PT (Ty n), PS "and", PT (Ty m), PS "are not alpha-equal."]
 
 The above rules outline all of the cases for alpha equality. Anything
 else fails.

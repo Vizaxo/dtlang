@@ -12,7 +12,7 @@ maxNesting (Var v) = 0
 maxNesting (Lam _ t) = maxNesting t + 1
 maxNesting (Pi _ t) = maxNesting t + 1
 maxNesting (App a b) = max (maxNesting a) (maxNesting b)
-maxNesting Ty = 0
+maxNesting (Ty _) = 0
 maxNesting (Let _ bindings body) = max (maxNesting body) bindNesting
   where bindNesting = maximumOr 0 $ fmap (maxNesting . snd) bindings
   --Let calculation is wrong: each binding could be nested deeply. But
@@ -34,7 +34,7 @@ subst v with pi@(Pi (u,uTy) ret)
   | v == u    = pi --Variable is shadowed
   | otherwise = Pi (u,(subst v with uTy)) (subst v with ret)
 subst v with (App a b) = App (subst v with a) (subst v with b)
-subst v with Ty = Ty
+subst v with (Ty n) = Ty n
 subst v with lett@(Let rec bindings body)
   | elem v (fst <$> fst <$> bindings) = lett --Variable is shadowed
   | otherwise = Let rec
@@ -57,7 +57,7 @@ prettyPrint (Var v) = show v
 prettyPrint (Lam (u,uTy) body) = "\\" <> show u <> ":" <> prettyPrint uTy <> ". (" <> prettyPrint body <> ")"
 prettyPrint (Pi (u,uTy) ret) = show u <> ":" <> prettyPrint uTy <> " -> (" <> prettyPrint ret <> ")"
 prettyPrint (App a b) = "(" <> prettyPrint a <> ") (" <> prettyPrint b <> ")"
-prettyPrint Ty = "Type"
+prettyPrint (Ty n) = "(Type " <> show n <> ")"
 prettyPrint (Let rec bindings body) = pplet rec <> ppbindings <> "in (" <> prettyPrint body <> ")"
   where pplet Rec = "letrec"
         pplet NoRec = "let"
@@ -74,7 +74,7 @@ freeVars (Ctor c args) = concat (freeVars <$> args)
 freeVars (Lam (v,ty) body) = nub (freeVars body ++ freeVars ty) \\ [v]
 freeVars (Pi (v,a) ret) = nub (freeVars ret ++ freeVars a) \\ [v]
 freeVars (App a b) = nub $ freeVars a ++ freeVars b
-freeVars Ty = []
+freeVars (Ty _) = []
 freeVars (Let _ xs body) = nub (freeVars body) \\ fmap (fst . fst) (nub xs)
   --TODO: free vars in let bindings
 
@@ -85,5 +85,5 @@ boundVars (Ctor c args) = concat (boundVars <$> args)
 boundVars (Lam (v,_) body) = v:boundVars body
 boundVars (Pi (v,_) ret) = v:boundVars ret
 boundVars (App a b) = boundVars a ++ boundVars b
-boundVars Ty = []
+boundVars (Ty _) = []
 boundVars (Let _ xs body) = fmap (fst . fst) xs ++ boundVars body

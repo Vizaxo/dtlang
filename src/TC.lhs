@@ -3,6 +3,7 @@
 > import Types
 > import Utils
 
+> import Control.Lens hiding (Context)
 > import Control.Monad.Except
 > import Control.Monad.Trans.MultiState
 > import Data.Either
@@ -129,14 +130,21 @@ We start with an empty context.
 >     Just ty -> return ty
 >   where findCtor (DataDecl _ _ ctors) = lookup c ctors
 
+Run the TC monad, outputting all information. This is useful for debugging purposes.
+
+> debugTC :: TC a -> Either TypeError (a, GenVar, Context)
+> debugTC = ((\((a,b),c) -> (a,b,c)) <$>) . runExcept . runMultiStateTNil . withMultiStateAS emptyCtx . withMultiStateAS (toEnum @GenVar 0)
+
+Get the context that was generated from a TC computation.
+
+> getCtxTC :: TC a -> Either TypeError Context
+> getCtxTC = ((^. _3) <$>) . debugTC
+
 We can run the TC monad. If a TypeError has occured elsewhere this
 will be returned. Otherwise, we get the pure value back.
 
 > runTC :: TC a -> Either TypeError a
-> runTC = runExcept . runMultiStateTNil . withMultiStateA emptyCtx . withMultiStateA (toEnum 0)
-
-> debugTC :: TC a -> Either TypeError (a, GenVar, Context)
-> debugTC = ((\((a,b),c) -> (a,b,c)) <$>) . runExcept . runMultiStateTNil . withMultiStateAS emptyCtx . withMultiStateAS (toEnum @GenVar 0)
+> runTC = ((^. _1) <$>) . debugTC
 
 For functions returning a `TC ()`, writing `success` is clearer than
 writing `return ()`.

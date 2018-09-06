@@ -25,16 +25,16 @@ typeCheck (Ctor c args) = do
   tcArgList ty args
 typeCheck (Lam (x,xTy) body) = do
   typeCheck xTy >>= whnf >>= \case
-    Ty -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
-    t  -> throwError $ TypeError [PS "Expected type", PT Ty, PS ", got type", PT t]
+    (Ty n) -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
+    t  -> throwError $ TypeError [PS "Expected type (Ty n), got type", PT t]
 typeCheck (Pi (x,xTy) ret) = do
   typeCheck xTy >>= whnf >>= \case
-    Ty -> do
+    (Ty n) -> do
       extendCtx (x,xTy) (typeCheck ret) >>= whnf >>= \case
-        Ty -> return Ty
+        (Ty m) -> return (Ty (max n m))
         t  -> throwError $ TypeError
-          [PS "Expected type ", PT Ty, PS ", got type", PT t]
-    t -> throwError $ TypeError [PS "Expected type ", PT Ty, PS ", got type ", PT t]
+          [PS "Expected a (Ty n), got type", PT t]
+    t -> throwError $ TypeError [PS "Expected a (Ty n), got type ", PT t]
 typeCheck (App a b) =
   typeCheck a >>= whnf >>= \case
     Pi (x,xTy) ret -> do
@@ -42,7 +42,7 @@ typeCheck (App a b) =
       extendTypeError (betaEq bTy xTy) [PS "When type-checking", PT (App a b)]
       return (subst x b ret)
     t -> throwError $ TypeError [PS "Trying to apply a non-function type in the term", PT (App t b)]
-typeCheck Ty = return Ty
+typeCheck (Ty n) = return (Ty (n+1))
 typeCheck (Let NoRec bindings body) = do
   --Type-check the bindings without any of the bindings in scope
   sequence $ typeCheckBinding <$> bindings
@@ -96,7 +96,7 @@ typeCheckData :: DataDecl -> TC ()
 typeCheckData d@(DataDecl name (Type ty) cs) = do
   --TODO: propogating the context like state is just wrong? go back to reader?
   nameUnique name
-  isolateCtx $ ty `hasType` Type Ty
+  isolateCtx $ isType ty
   mModify (insertCtx name ty)
   bs <- mapM typeCheckC cs
   mapM_ (\(n,t) -> nameUnique n >> mModify (insertCtx n t)) bs
@@ -104,7 +104,7 @@ typeCheckData d@(DataDecl name (Type ty) cs) = do
 
   where
     typeCheckC (c, (Type cTy)) = do
-      cTy `hasType` (Type Ty)
+      isType cTy
       cTy' <- whnf cTy
       returnsData name cTy'
       return (c, cTy)
@@ -149,14 +149,14 @@ fromCtx v = do
 -- an error otherwise.
 notType t =
   typeCheck t >>= \case
-    Ty -> throwError $ TypeError
-      [PS "Expected something not a type, got", PT t, PS ":", PT Ty]
+    (Ty n) -> throwError $ TypeError
+      [PS "Expected something not a type, got", PT t, PS ":", PT (Ty n)]
     ty -> return ty
 
 -- | Returns () if the given term is a type; throws an error otherwise.
 isType t = do
   typeCheck t >>= \case
-    Ty -> return ()
+    (Ty n) -> return ()
     term -> throwError $ TypeError
       [PS "Expected a type, got", PT t, PS ":", PT term]
 

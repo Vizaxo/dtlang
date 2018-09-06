@@ -15,7 +15,7 @@ dupConstructors :: DataDecl
 dupConstructors =
   DataDecl
   (Specified "data")
-  (Type Ty)
+  (Type (Ty 0))
   ([(Specified "dupConstructor", Type $ Var (Specified "data"))
    ,(Specified "dupConstructor", Type $ Var (Specified "data"))])
 
@@ -25,21 +25,21 @@ badConstructorType :: DataDecl
 badConstructorType =
   DataDecl
   (Specified "data")
-  (Type Ty)
-  ([(Specified "invalidTypeConstructor", Type $ Ty)])
+  (Type (Ty 0))
+  ([(Specified "invalidTypeConstructor", Type $ (Ty 0))])
 
 badVarReference :: DataDecl
 badVarReference =
   DataDecl
   (Specified "Vect")
-  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
+  (Type (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0))))
    -- VNil : Vect 0 a
   ([(Specified "VNil", Type $
-      Pi (Specified "a", Ty) $
+      Pi (Specified "a", (Ty 0)) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
-   -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
+   -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
    ,(Specified "VCons", Type $
-      Pi (Specified "a",Ty) $
+      Pi (Specified "a",(Ty 0)) $
        Pi (Specified "x",Var (Specified "a")) $
         Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
          (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))))])
@@ -54,12 +54,12 @@ badVarReferenceOtherCtor :: DataDecl
 badVarReferenceOtherCtor =
   DataDecl
   (Specified "Vect")
-  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
+  (Type (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0))))
    -- VNil : Vect 0 a
   ([(Specified "VNil", Type $
-      Pi (Specified "a", Ty) $
+      Pi (Specified "a", (Ty 0)) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
-   -- VCons : (a:Ty) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
+   -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
    ,(Specified "VCons", Type $
       Pi (Specified "x",Var (Specified "a")) $
        Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
@@ -69,13 +69,13 @@ badVarReferenceOtherCtorRev :: DataDecl
 badVarReferenceOtherCtorRev =
   DataDecl
   (Specified "Vect")
-  (Type (Pi (Specified "a", Ty) (Pi (Specified "n", Var (Specified "Nat")) Ty)))
+  (Type (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0))))
   ([(Specified "VCons", Type $
       Pi (Specified "x",Var (Specified "a")) $
        Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
         (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))))
    ,(Specified "VNil", Type $
-      Pi (Specified "a", Ty) $
+      Pi (Specified "a", (Ty 0)) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))])
 
 test_constructorReferenceVarInOtherConstructor
@@ -133,36 +133,36 @@ badSigmas = [
   DataDecl
   (Specified "Sigma")
   (Type $
-    (var "a", Ty)
-    --> (var "b", (var "x", v "a") --> Ty)
-    --> Ty)
+    (var "a", (Ty 0))
+    --> (var "b", (var "x", v "a") --> (Ty 0))
+    --> (Ty 0))
   [(var "MkSigma", Type $
-     (var "a", Ty)
-     --> (var "b", (var "ignored", v "a") --> Ty)
+     (var "a", (Ty 0))
+     --> (var "b", (var "ignored", v "a") --> (Ty 0))
      --> (var "x", v "a")
      --> (var "ignored2", (v "b" `App` v "x"))
      --> (v "Sigma" `App` v "a" `App` (v "b" `App` v "x")))]
   , DataDecl
   (Specified "Sigma")
   (Type $
-    (var "a", Ty)
-    --> (var "b", (var "x", v "a") --> Ty)
-    --> Ty)
+    (var "a", (Ty 0))
+    --> (var "b", (var "x", v "a") --> (Ty 0))
+    --> (Ty 0))
   [(var "MkSigma", Type $
-     (var "a", Ty)
-     --> (var "b", (var "ignored", v "a") --> Ty)
+     (var "a", (Ty 0))
+     --> (var "b", (var "ignored", v "a") --> (Ty 0))
      --> (var "x", v "a")
      --> (var "ignored2", (v "b" `App` v "a"))
      --> (v "Sigma" `App` v "a" `App` v "b"))]
   , DataDecl
   (Specified "Sigma")
   (Type $
-    (var "a", Ty)
-    --> (var "b", (var "x", v "a") --> Ty)
-    --> Ty)
+    (var "a", (Ty 0))
+    --> (var "b", (var "x", v "a") --> (Ty 0))
+    --> (Ty 0))
   [(var "MkSigma", Type $
-     (var "a", Ty)
-     --> (var "b", (var "ignored", v "a") --> Ty)
+     (var "a", (Ty 0))
+     --> (var "b", (var "ignored", v "a") --> (Ty 0))
      --> (var "x", v "a")
      --> (var "ignored2", v "b")
      --> (v "Sigma" `App` v "a" `App` v "b"))]]

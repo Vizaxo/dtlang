@@ -11,17 +11,23 @@ import Utils
 
 import Control.Lens hiding (Context, elements)
 import Control.Monad
+import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.MultiState
 import Data.Maybe
+import Data.Natural hiding (view)
 import QuickCheck.GenT
 import Test.QuickCheck (Property, Arbitrary, arbitrary, shrink, Gen, shrinkList, collect, (===))
 
 type GenTerm = Term -> Context -> [Name] -> BackTrackGen (Term)
 
 genTargetTy :: GenTerm
-genTargetTy Ty _ _ = sized $ \size -> if size < (-1) then mzero else return Ty
+genTargetTy (Ty 0) _ _ = mzero
+genTargetTy (Ty n) _ _ = sized $ \size -> if size < (-1) then mzero else return (Ty (n-1))
 genTargetTy _  _ _ = mzero
+
+genTargetDataType :: GenTerm
+genTargetDataType target ctx _ = elements' $ map (Var . name) $ filter (isBetaEq target . unType . ty) (datatypes ctx)
 
 elements' [] = mzero
 elements' xs = elements xs
@@ -40,14 +46,21 @@ prop_GenFreshIsFresh ctx avoid =
   in not (elem v ((fst <$> getCtx ctx) ++ avoid))
 
 genTargetPi :: GenTerm
-genTargetPi Ty ctx avoid = sized $ \size -> genTargetPi' size
+genTargetPi (Ty n) ctx avoid = sized $ \size -> genTargetPi' size
   where
     genTargetPi' size | size <= 0 = mzero
     genTargetPi' _ = do
       let v = fresh ctx avoid
-      a <- genTarget Ty ctx (v:avoid)
-      b <- genTarget Ty (insertCtx v a ctx) (v:avoid)
+      (m,p) <- lift (arbitrary @Ordering) >>= \case
+        EQ -> return (n,n)
+        LT -> (,n) <$> genLeq n
+        GT -> (n,) <$> genLeq n
+      a <- genTarget (Ty m) ctx (v:avoid)
+      b <- genTarget (Ty p) (insertCtx v a ctx) (v:avoid)
       return (Pi (v,a) b)
+
+    genLeq :: (Enum n, Num n) => n -> MaybeT Gen n
+    genLeq n = elements' [0..n]
 genTargetPi _ ctx _ = mzero
 
 genTargetLam :: GenTerm
@@ -65,7 +78,7 @@ genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (min size 3)
     genTargetApp' size
       | size <= 0 = mzero
       | otherwise = do
-          argTy <- maxSize 2 $ genTarget Ty ctx avoid
+          argTy <- maxSize 2 $ genTarget (Ty 0) ctx avoid
           let x = fresh ctx (avoid ++ allVars argTy ++ allVars target)
           --TODO: how do we handle substitution?
           a <- genTarget (Pi (x,argTy) target) ctx (x:avoid)
@@ -81,7 +94,7 @@ pickGen xs target ctx avoid = do
     Right t -> return t
 
   res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
-  assertRight (runTC $ mSet ctx >> hasType target' (Type Ty)) "target is not a type"
+  assertRight (runTC $ mSet ctx >> isType target') "target is not a type"
   assertRight
     (runTC $ mSet ctx >> hasType res (Type target'))
     $  "genereated term doesn't have target type:\n"
@@ -99,16 +112,21 @@ genTarget = pickGen
            , (10, genTargetVar)
            , (30, genTargetPi)
            , (50, genTargetLam)
+           , (30, genTargetDataType)
            , (0, genTargetApp)
            ]
 --TODO: add indir rule
 
 genTermAndType :: Gen (Term, Term)
 genTermAndType = scale (+1) . backtrackUntilSuccess $ do
-  ty <- scale (`div` 4) $ genTarget Ty emptyCtx []
-  term <- scale (`div` 2) $ genTarget ty emptyCtx []
+  n <- freqBacktrack $ zip
+         (takeWhile (/= 0) $ iterate (`div` 4) (4^1)) --Frequencies
+         (return <$> [1..])                           --Type universes
+  ty <- scale (`div` 10) $ genTarget (Ty n) emptyCtx []
+  term <- scale (`div` 5) $ genTarget ty emptyCtx []
   return (term, ty)
 
+--TODO: run exhaustive search, don't just keep generating the same terms forever
 backtrackUntilSuccess :: BackTrackGen a -> Gen a
 backtrackUntilSuccess gen = do
   runBackTrackGen gen >>= \case
@@ -117,6 +135,17 @@ backtrackUntilSuccess gen = do
 
 genTerm :: Gen Term
 genTerm = fst <$> genTermAndType
+
+-- | Generate a term whose type is of the given universe level
+atUniverseLevel :: Natural -> Context -> Gen Term
+atUniverseLevel u ctx = scale (+1) . backtrackUntilSuccess $ do
+  -- TODO: don't use max here; should be able to properly backtrack over generation of the type
+  ty <- scale (max 2 . (`div` 20)) $ genTarget (Ty u) ctx []
+  term <- scale (max 2 . (`div` 10)) $ genTarget ty ctx []
+  return term
+
+genTermAt :: Term -> Gen (Maybe Term)
+genTermAt ty = runBackTrackGen (genTarget ty emptyCtx [])
 
 prop_wellTyped = wellTyped
 
@@ -140,7 +169,7 @@ instance Arbitrary (Term) where
                                 [Pi (x,xTy') ret' | (ret', xTy') <- shrink (ret, xTy)]
       shrink' (App a b) = [a, b] ++
                          [App a' b' | (a',b') <- shrink (a,b)]
-      shrink' Ty = []
+      shrink' (Ty n) = []
       shrink' (Let rec bindings body) =
         [body] ++
         fmap snd bindings ++
@@ -165,7 +194,7 @@ instance Arbitrary Name where
   arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
 
 instance Arbitrary Type where
-  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget Ty emptyCtx [])
+  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget (Ty 0) emptyCtx [])
 
 instance Arbitrary Context where
   --TODO: arbitrary data declarations

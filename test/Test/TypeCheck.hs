@@ -10,6 +10,7 @@ import TypeCheck
 import Types
 
 import Data.Either
+import Control.Monad.Except
 import Test.QuickCheck
 
 -- | Make sure that the arbitrary instance for WellTyped generates well-typed terms.
@@ -20,7 +21,9 @@ prop_typeOfIsWellTyped :: WellTyped -> Bool
 prop_typeOfIsWellTyped (WellTyped term) = succeeded $ do
   ty <- typeCheck term
   ty' <- typeCheck ty
-  betaEq ty' Ty
+  whnf ty' >>= \case
+    Ty n -> return ()
+    _ -> throwError $ InternalError []
 
 -- | Applying a term to id (specialised to the term's type) should have no
 --   effect on the type.

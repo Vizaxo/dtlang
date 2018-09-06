@@ -35,6 +35,7 @@ library
                      , lens
                      , mtl
                      , multistate
+                     , natural-numbers
                      , QuickCheck
   exposed-modules:     Equality
                      , Examples
@@ -77,3 +78,4 @@ test-suite Test
                      , transformers
                      , random
                      , multistate
+                     , natural-numbers
