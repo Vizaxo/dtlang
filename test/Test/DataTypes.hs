@@ -175,3 +175,45 @@ test_badSigmasFailTC
 test_sigmaTypeChecks = assertRight $ runTC $ typeCheckData sigma
 
 test_voidTypeChecks = assertRight $ runTC $ typeCheckData void
+
+
+goodBadCtx :: DataDecl
+goodBadCtx = DataDecl
+  (Specified "Good0")
+  (Type $
+    (var "bad0", (Ty 0))
+    --> (var "bad1", (var "bad2", v "bad0") --> (Ty 0))
+    --> (Ty 0))
+  [(var "Good1", Type $
+     (var "bad3", (Ty 0))
+     --> (var "bad4", (var "bad5", v "bad3") --> (Ty 0))
+     --> (var "bad6", v "bad3")
+     --> (var "bad7", (v "bad4" `App` v "bad6"))
+     --> (v "Good0" `App` v "bad3" `App` v "bad4")
+   )]
+
+-- | Test that the context contains things that should be in the
+-- context, and doesn't contain anything that shouldn't be.
+test_contextProperlyFilled :: Assertion
+test_contextProperlyFilled
+  = assertEqual "Incorrect context returned" expectedCtx returnedCtx
+  where
+    returnedCtx = getCtxTC $ typeCheckData goodBadCtx
+    expectedCtx =
+      Right (Context {getCtx = [(Specified "Good1",Pi (Specified
+      "bad3",Ty 0) (Pi (Specified "bad4",Pi (Specified "bad5",Var
+      (Specified "bad3")) (Ty 0)) (Pi (Specified "bad6",Var (Specified
+      "bad3")) (Pi (Specified "bad7",App (Var (Specified "bad4")) (Var
+      (Specified "bad6"))) (App (App (Var (Specified "Good0")) (Var
+      (Specified "bad3"))) (Var (Specified "bad4"))))))),(Specified
+      "Good0",Pi (Specified "bad0",Ty 0) (Pi (Specified "bad1",Pi
+      (Specified "bad2",Var (Specified "bad0")) (Ty 0)) (Ty 0)))],
+      datatypes = [DataDecl {name = Specified "Good0", ty = Type
+      {unType = Pi (Specified "bad0",Ty 0) (Pi (Specified "bad1",Pi
+      (Specified "bad2",Var (Specified "bad0")) (Ty 0)) (Ty 0))},
+      constructors = [(Specified "Good1",Type {unType = Pi (Specified
+      "bad3",Ty 0) (Pi (Specified "bad4",Pi (Specified "bad5",Var
+      (Specified "bad3")) (Ty 0)) (Pi (Specified "bad6",Var (Specified
+      "bad3")) (Pi (Specified "bad7",App (Var (Specified "bad4")) (Var
+      (Specified "bad6"))) (App (App (Var (Specified "Good0")) (Var
+      (Specified "bad3"))) (Var (Specified "bad4"))))))})]}]})

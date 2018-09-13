@@ -98,7 +98,7 @@ typeCheckData d@(DataDecl name (Type ty) cs) = do
   nameUnique name
   isolateCtx $ isType ty
   mModify (insertCtx name ty)
-  bs <- mapM typeCheckC cs
+  bs <- mapM (isolateCtx . typeCheckC) cs
   mapM_ (\(n,t) -> nameUnique n >> mModify (insertCtx n t)) bs
   mModify $ insertDataDecl d
 
