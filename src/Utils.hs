@@ -5,6 +5,7 @@ module Utils where
 import Control.Monad.State
 import Control.Monad.Trans.MultiState
 import Control.Monad.Except
+import Debug.Trace
 
 -- | The `blackbird` combinator for composing a function of arity 2.
 infixr 5 .:
@@ -47,3 +48,6 @@ foldr1M f xs = foldl1 f' return xs
 
 adjacentsSatisfyM p (x:y:xs) = p x y >> adjacentsSatisfyM p (y:xs)
 adjacentsSatisfyM p _ = return ()
+
+spy :: Show a => a -> a
+spy a = trace (show a) a
