@@ -8,10 +8,10 @@ import Data.Either
 
 defaultCtx :: Either TypeError Context
 defaultCtx = getCtxTC $
-  typeCheck id' >>
-  typeCheck fst' >>
-  typeCheck snd' >>
-  typeCheck pair >>
+  checkAndInsert (Specified "id") id' >>
+  checkAndInsert (Specified "fst") fst' >>
+  checkAndInsert (Specified "snd") snd' >>
+  checkAndInsert (Specified "pair") pair >>
   typeCheckData nat >>
   typeCheckData list >>
   typeCheckData vect >>

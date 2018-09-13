@@ -92,12 +92,11 @@ pickGen xs target ctx avoid = do
   target' <- case runTC $ mSet ctx >> whnf target of
     Left e -> error $ "whnf failed during generation: " <> show e <> "in the context " <> show ctx <> "\nWhen trying to whnf " <> show target
     Right t -> return t
-
-  res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
   assertRight (runTC $ mSet ctx >> isType target') "target is not a type"
+  res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
   assertRight
     (runTC $ mSet ctx >> hasType res (Type target'))
-    $  "genereated term doesn't have target type:\n"
+    $  "generated term doesn't have target type:\n"
     <> "the term\n"
     <> show res <> "\n"
     <> "should have type\n"
@@ -107,15 +106,19 @@ pickGen xs target ctx avoid = do
   where mkGen tgt gen = scale (subtract 1) $ gen tgt ctx avoid
 
 genTarget :: GenTerm
-genTarget = pickGen
+genTarget target ctx avoid = do
+  res <- pickGen
            [ (20, genTargetTy)
            , (10, genTargetVar)
            , (30, genTargetPi)
            , (50, genTargetLam)
            , (30, genTargetDataType)
            , (0, genTargetApp)
-           ]
---TODO: add indir rule
+           ] target ctx avoid
+  --TODO: add indir rule
+  unless (succeeded (mSet ctx >> typeCheck res))
+    (error ("Generated term is not well-typed:" <> show res))
+  return res
 
 genTermAndType :: Gen (Term, Term)
 genTermAndType = scale (+1) . backtrackUntilSuccess $ do
@@ -142,7 +145,14 @@ atUniverseLevel u ctx = scale (+1) . backtrackUntilSuccess $ do
   -- TODO: don't use max here; should be able to properly backtrack over generation of the type
   ty <- scale (max 2 . (`div` 20)) $ genTarget (Ty u) ctx []
   term <- scale (max 2 . (`div` 10)) $ genTarget ty ctx []
+  unless (succeeded (mSet ctx >> typeCheck ty))
+    (error ("atUniverseLevel: Generated type is not well-typed:" <> show ty))
+  unless (succeeded (mSet ctx >> typeCheck term))
+    (error ("atUniverseLevel: Generated term is not well-typed:" <> show term))
   return term
+
+genTermAtCtx :: Term -> Context -> Gen (Maybe Term)
+genTermAtCtx ty ctx = scale (max 2 . (`div` 10)) $ runBackTrackGen (genTarget ty ctx [])
 
 genTermAt :: Term -> Gen (Maybe Term)
 genTermAt ty = runBackTrackGen (genTarget ty emptyCtx [])
@@ -192,9 +202,6 @@ instance Arbitrary GenVar where
 
 instance Arbitrary Name where
   arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
-
-instance Arbitrary Type where
-  arbitrary = scale (+1) $ Type . fromJust <$> runBackTrackGen (genTarget (Ty 0) emptyCtx [])
 
 instance Arbitrary Context where
   --TODO: arbitrary data declarations

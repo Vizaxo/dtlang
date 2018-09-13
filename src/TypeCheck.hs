@@ -166,3 +166,7 @@ typeCheckBinding ((x,xTy),val) = do
   isType xTy
   betaEq xTy ty
 
+-- | Type-check a term and insert it into the context.
+checkAndInsert name term = do
+  isolateCtx $ typeCheck term
+  mModify (insertCtx name term)

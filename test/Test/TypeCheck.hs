@@ -9,16 +9,19 @@ import Term
 import TypeCheck
 import Types
 
-import Data.Either
 import Control.Monad.Except
+import Control.Monad.Trans.MultiState
+import Data.Either
 import Test.QuickCheck
+import Test.Tasty.HUnit
 
 -- | Make sure that the arbitrary instance for WellTyped generates well-typed terms.
-prop_genWellTyped :: WellTyped -> Bool
-prop_genWellTyped (WellTyped term) = wellTyped term
+prop_genWellTyped :: Context -> WellTyped -> Bool
+prop_genWellTyped ctx (WellTyped term) = succeeded (mSet ctx >> typeCheck term)
 
-prop_typeOfIsWellTyped :: WellTyped -> Bool
-prop_typeOfIsWellTyped (WellTyped term) = succeeded $ do
+prop_typeOfIsWellTyped :: Context -> WellTyped -> Bool
+prop_typeOfIsWellTyped ctx (WellTyped term) = succeeded $ do
+  mSet ctx
   ty <- typeCheck term
   ty' <- typeCheck ty
   whnf ty' >>= \case
@@ -27,28 +30,32 @@ prop_typeOfIsWellTyped (WellTyped term) = succeeded $ do
 
 -- | Applying a term to id (specialised to the term's type) should have no
 --   effect on the type.
-prop_idPreservesType :: WellTyped -> Property
-prop_idPreservesType (WellTyped term) =
-  wellTyped term ==> let termT = typeCheck term
-                        in termT `tcBetaEq` typeCheck (appId term)
+prop_idPreservesType :: Context -> WellTyped -> Bool
+prop_idPreservesType ctx (WellTyped term) = succeeded $ do
+  termT <- mSet ctx >> typeCheck term
+  resT <- mSet ctx >> typeCheck (id' `App` termT `App` term)
+  return $ termT `betaEq` resT
 
 -- | Applying a term twice to a pair then extracting the first element should
 --   have no effect on the type.
-prop_pairFstPreservesType :: WellTyped -> Property
-prop_pairFstPreservesType (WellTyped term) =
-  wellTyped term ==> let (Right termT) = runTC $ typeCheck term
-                        in return termT `tcBetaEq` typeCheck (pair `App` termT `App` term `App` term `App` (fst' `App` termT))
+prop_pairFstPreservesType :: Context -> WellTyped -> Bool
+prop_pairFstPreservesType ctx (WellTyped term) =
+  let (Right termT) = runTC $ mSet ctx >> typeCheck term
+  in return termT `tcBetaEq`
+     (mSet ctx >> typeCheck (pair `App` termT `App` term `App` term `App` (fst' `App` termT)))
 
 -- | Applying a term twice to a pair then extracting the second element should
 --   have no effect on the type.
-prop_pairSndPreservesType :: WellTyped -> Property
-prop_pairSndPreservesType (WellTyped term) =
-  wellTyped term ==> let (Right termT) = runTC $ typeCheck term
-                        in return termT `tcBetaEq` typeCheck (pair `App` termT `App` term `App` term `App` (snd' `App` termT))
+prop_pairSndPreservesType :: Context -> WellTyped -> Bool
+prop_pairSndPreservesType ctx (WellTyped term) =
+  let (Right termT) = runTC $ mSet ctx >> typeCheck term
+  in return termT `tcBetaEq`
+     (mSet ctx >> typeCheck (pair `App` termT `App` term `App` term `App` (snd' `App` termT)))
 
 -- | Eta-expanding a term should have no effect on the type.
-prop_etaExpansionType :: WellTyped -> WellTyped -> Name -> Bool
-prop_etaExpansionType (WellTyped term) (WellTyped arg) v
-  = typeCheck term `tcBetaEq` typeCheck (App (Lam binding term) arg)
+prop_etaExpansionType :: Context -> WellTyped -> WellTyped -> Name -> Bool
+prop_etaExpansionType ctx (WellTyped term) (WellTyped arg) v
+  = (mSet ctx >> typeCheck term)
+  `tcBetaEq` (mSet ctx >> typeCheck (App (Lam binding term) arg))
   where binding = (v, argTy)
         (Right argTy) = runTC $ typeCheck arg

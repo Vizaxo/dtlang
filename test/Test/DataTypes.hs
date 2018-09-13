@@ -177,8 +177,8 @@ test_sigmaTypeChecks = assertRight $ runTC $ typeCheckData sigma
 test_voidTypeChecks = assertRight $ runTC $ typeCheckData void
 
 
-goodBadCtx :: DataDecl
-goodBadCtx = DataDecl
+goodBadCtxData :: DataDecl
+goodBadCtxData = DataDecl
   (Specified "Good0")
   (Type $
     (var "bad0", (Ty 0))
@@ -194,11 +194,11 @@ goodBadCtx = DataDecl
 
 -- | Test that the context contains things that should be in the
 -- context, and doesn't contain anything that shouldn't be.
-test_contextProperlyFilled :: Assertion
-test_contextProperlyFilled
+test_contextProperlyFilledData :: Assertion
+test_contextProperlyFilledData
   = assertEqual "Incorrect context returned" expectedCtx returnedCtx
   where
-    returnedCtx = getCtxTC $ typeCheckData goodBadCtx
+    returnedCtx = getCtxTC $ typeCheckData goodBadCtxData
     expectedCtx =
       Right (Context {getCtx = [(Specified "Good1",Pi (Specified
       "bad3",Ty 0) (Pi (Specified "bad4",Pi (Specified "bad5",Var
