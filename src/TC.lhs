@@ -122,7 +122,7 @@ We start with an empty context.
 >     Nothing -> throwError $ TypeError [PS "Type", PN n, PS "not found in context."]
 >     Just d -> return d
 
-> lookupCtor :: Constructor -> TC Type
+> lookupCtor :: (MonadError TypeError m, MonadMultiGet Context m) => Constructor -> m Type
 > lookupCtor c = do
 >   Context ctx ds <- mGet
 >   case listToMaybe $ catMaybes $ map findCtor ds of

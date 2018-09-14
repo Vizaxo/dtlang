@@ -168,7 +168,7 @@ Evaluate a term to weak-head normal-form. This assumes that the given
 term type-checks. The resulting term will have the same type as the
 input term.
 
-> whnf :: Term -> TC Term
+> whnf :: (MonadError TypeError m, MonadMultiGet Context m) => Term -> m Term
 
 An application term can be reduced by applying the function to the
 argument.
@@ -227,7 +227,9 @@ Convert a type to whnf.
 Eta-expand a constructor, so that constructors are always fully applied.
 The type is assumed to be in whnf.
 
-> partiallyApplyCtor :: Constructor -> TC Term
+> partiallyApplyCtor
+>   :: (MonadError TypeError m, MonadMultiGet Context m)
+>   => Constructor -> m Term
 > partiallyApplyCtor c = do
 >   (Type ty) <- lookupCtor c
 >   return $ partiallyApplyCtor' c ty []
