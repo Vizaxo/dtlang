@@ -28,15 +28,18 @@ library
                      , GeneralizedNewtypeDeriving
                      , LambdaCase
                      , MultiParamTypeClasses
+                     , OverloadedStrings
                      , ScopedTypeVariables
                      , TupleSections
                      , TypeApplications
   build-depends:       base >= 4.7 && < 5
+                     , QuickCheck
                      , lens
                      , mtl
                      , multistate
                      , natural-numbers
-                     , QuickCheck
+                     , parsec
+                     , text
   exposed-modules:     Equality
                      , Examples
                      , TC
