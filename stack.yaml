@@ -41,6 +41,7 @@ packages:
 extra-deps:
 - QuickCheck-2.11.3
 - QuickCheck-GenT-0.2.0
+- deriving-compat-0.5.2
 - lens-4.17
 - logict-state-0.1.0.4
 - mtl-2.2.2
@@ -48,6 +49,7 @@ extra-deps:
 - natural-numbers-0.1.2.0
 - parsec-3.1.13.0
 - random-1.1
+- recursion-schemes-5.0.3
 - tasty-1.1.0.3
 - tasty-hunit-0.10.0.1
 - tasty-quickcheck-0.10
