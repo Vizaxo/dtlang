@@ -62,7 +62,7 @@ typeCheck (Case e xs) = do
   datatype@(DataDecl name ty ctors) <- lookupData dataname
   --TODO: use sets instead of lists
   let datactors = over _2 unType <$> (sortBy (comparing fst) ctors)
-  let casectors = sortBy (comparing constructor) $ xs
+  let casectors = sortBy (comparing ctConstructor) $ xs
   caseTys <- zipWithM (tcCase datatype) datactors casectors
   --TODO: check if empty cases work
   adjacentsSatisfyM betaEq caseTys

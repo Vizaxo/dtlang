@@ -146,3 +146,10 @@ sigma = DataDecl
      --> (var "ignored2", (v "b" `App` v "x"))
      --> (v "Sigma" `App` v "a" `App` v "b")
    )]
+
+plus :: Definition
+plus = Definition (Specified "plus") (Pi (var "n", natT) $ Pi (var "m", natT) $ natT)
+  (Lam (var "n", natT) $ Lam (var "m", natT) $
+   Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
+                , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
+                ])

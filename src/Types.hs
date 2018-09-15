@@ -3,10 +3,13 @@ module Types where
 import Utils
 import Data.Natural
 
--- | A program is a list of data declarations, and top-level definitions.
-type Program = ( [DataDecl] -- ^Data declarations
-               , [TopLevel] -- ^Top-level definitions
-               )
+-- | A program is a list of top-level definitions and data declarations
+type Program = [TopLevel]
+
+data TopLevel
+  = TLData DataDecl
+  | TLDef Definition
+  deriving (Eq, Show)
 
 -- | A data declaration has a name, a type, and a list of constructors.
 --   Each constructor has an associated type.
@@ -21,9 +24,12 @@ data DataDecl = DataDecl
 type Constructor = Name
 
 -- | A top-level definition is a name and a body.
-type TopLevel = ( Name -- ^Name
-                , Term -- ^Body
-                )
+data Definition = Definition
+  { defName :: Name
+  , defType :: Term
+  , defBody :: Term
+  }
+  deriving (Eq, Show)
 
 -- | A binding of a variable to a type.
 type Binding = (Name, Term)
@@ -46,9 +52,9 @@ infixr 5 -->
 infixl 5 `App`
 
 data CaseTerm = CaseTerm
-  { constructor :: Constructor
-  , bindings :: [Binding]
-  , expression :: Term
+  { ctConstructor :: Constructor
+  , ctBindings :: [Binding]
+  , ctExpression :: Term
   }
   deriving (Eq, Show)
 

@@ -10,7 +10,6 @@ import Text.Read hiding (Number, choice)
 
 data Token
   = Identifier String
-  | CapIdent String
   | Number Integer
   | Comment String
   | Lambda
@@ -25,6 +24,8 @@ data Token
   | Of
   | Pipe
   | Pi
+  | Define
+  | Data
   deriving (Eq, Show)
 
 type TokParser = Parsec [Token] ()
@@ -43,6 +44,8 @@ reservedWords =
   , ("of", Of)
   , ("|", Pipe)
   , ("Pi", Pi)
+  , ("define", Define)
+  , ("data", Data)
   ]
 
 reserved :: Parser Token
@@ -52,10 +55,7 @@ reserved = choice (try . parseReserved <$> reservedWords)
     parseReserved (s, t) = t <$ string s
 
 identifier :: Parser Token
-identifier = Identifier <$> ((:) <$> lower <*> many alphaNum)
-
-capIdentifier :: Parser Token
-capIdentifier = CapIdent <$> ((:) <$> upper <*> many alphaNum)
+identifier = Identifier <$> ((:) <$> letter <*> many alphaNum)
 
 startComment :: Parser ()
 startComment = void $ string "{-"
@@ -77,7 +77,7 @@ num = toNum . fmap pack $ many digit
         Nothing -> mzero
 
 tok :: Parser Token
-tok = many comment *> (reserved <|> identifier <|> capIdentifier <|> num)
+tok = many comment *> (reserved <|> identifier <|> num)
 
 lexer = spaces *> sepBy tok spaces <* eof
 

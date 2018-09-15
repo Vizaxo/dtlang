@@ -15,14 +15,17 @@ data ReplError
   = ErrLexParse LexerParserError
   | ErrType TypeError
   | ErrRun TypeError
+  | Unsupported
   deriving Show
 
 command :: Text -> Either ReplError (Term, Term)
 command s = do
-  t <- first ErrLexParse $ parser s
-  ty <- first ErrType $ runTC $ typeCheck t
-  term <- first ErrRun $ interpret emptyCtx t
-  return (term, ty)
+  (first ErrLexParse $ replParser s) >>= \case
+    Left _ -> Left Unsupported
+    Right t -> do
+      ty <- first ErrType $ runTC $ typeCheck t
+      term <- first ErrRun $ interpret emptyCtx t
+      return (term, ty)
 
 showCommand :: Either ReplError (Term, Term) -> String
 showCommand (Left err) = "Error: " <> show err
