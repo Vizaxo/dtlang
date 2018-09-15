@@ -13,11 +13,6 @@ maxNesting (Lam _ t) = maxNesting t + 1
 maxNesting (Pi _ t) = maxNesting t + 1
 maxNesting (App a b) = max (maxNesting a) (maxNesting b)
 maxNesting (Ty _) = 0
-maxNesting (Let _ bindings body) = max (maxNesting body) bindNesting
-  where bindNesting = maximumOr 0 $ fmap (maxNesting . snd) bindings
-  --Let calculation is wrong: each binding could be nested deeply. But
-  --recursive let bindings can't be inlined, so this is good enough without
-  --being over-complicated.
 maxNesting (Case t branches) = max (maxNesting t) caseNesting
   where caseNesting = maximumOr 0 $ fmap (maxNesting . \(CaseTerm _ _ x)->x) branches
 
@@ -35,12 +30,6 @@ subst v with pi@(Pi (u,uTy) ret)
   | otherwise = Pi (u,(subst v with uTy)) (subst v with ret)
 subst v with (App a b) = App (subst v with a) (subst v with b)
 subst v with (Ty n) = Ty n
-subst v with lett@(Let rec bindings body)
-  | elem v (fst <$> fst <$> bindings) = lett --Variable is shadowed
-  | otherwise = Let rec
-                  (bimap (substBinding v with) (subst v with) <$> bindings)
-                  (subst v with body)
-  --where substBinding = (\((u,uTy),val) -> ((u,subst v with uTy), subst v with val))
 subst v with (Case e terms) = Case (subst v with e) (substCaseTerm v with <$> terms)
 
 substCaseTerm :: Name -> Term -> CaseTerm -> CaseTerm
@@ -58,10 +47,6 @@ prettyPrint (Lam (u,uTy) body) = "\\" <> show u <> ":" <> prettyPrint uTy <> ". 
 prettyPrint (Pi (u,uTy) ret) = show u <> ":" <> prettyPrint uTy <> " -> (" <> prettyPrint ret <> ")"
 prettyPrint (App a b) = "(" <> prettyPrint a <> ") (" <> prettyPrint b <> ")"
 prettyPrint (Ty n) = "(Type " <> show n <> ")"
-prettyPrint (Let rec bindings body) = pplet rec <> ppbindings <> "in (" <> prettyPrint body <> ")"
-  where pplet Rec = "letrec"
-        pplet NoRec = "let"
-        ppbindings = " bindings "
 
 -- | Get a list of all the bound and free variables in a term.
 allVars :: Term -> [Name]
@@ -75,8 +60,6 @@ freeVars (Lam (v,ty) body) = nub (freeVars body ++ freeVars ty) \\ [v]
 freeVars (Pi (v,a) ret) = nub (freeVars ret ++ freeVars a) \\ [v]
 freeVars (App a b) = nub $ freeVars a ++ freeVars b
 freeVars (Ty _) = []
-freeVars (Let _ xs body) = nub (freeVars body) \\ fmap (fst . fst) (nub xs)
-  --TODO: free vars in let bindings
 
 -- | Get a list of all the bound variables in a term.
 boundVars :: Term -> [Name]
@@ -86,4 +69,3 @@ boundVars (Lam (v,_) body) = v:boundVars body
 boundVars (Pi (v,_) ret) = v:boundVars ret
 boundVars (App a b) = boundVars a ++ boundVars b
 boundVars (Ty _) = []
-boundVars (Let _ xs body) = fmap (fst . fst) xs ++ boundVars body

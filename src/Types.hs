@@ -43,7 +43,6 @@ data Term = Var Name                         -- ^Variable
           | Pi Binding Term                  -- ^Pi var return
           | App Term Term                    -- ^Application
           | Ty Natural                       -- ^Type universes
-          | Let IsRec [(Binding, Term)] Term -- ^Let bindings in body
           | Case Term [CaseTerm]             -- ^Case expr of terms
           deriving (Eq, Show)
 
@@ -61,10 +60,6 @@ data CaseTerm = CaseTerm
 -- | @Type@ is just a synonym for @Term@, allowing slightly more
 -- informative documentation where needed.
 type Type = Term
-
--- | Determines whether a let(rec) expression is a let or a letrec.
-data IsRec = Rec | NoRec
-           deriving (Eq, Show)
 
 -- | A map from variables to their types.
 data Context = Context

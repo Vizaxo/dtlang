@@ -43,19 +43,6 @@ typeCheck (App a b) =
       return (subst x b ret)
     t -> throwError $ TypeError [PS "Trying to apply a non-function type in the term", PT (App t b)]
 typeCheck (Ty n) = return (Ty (n+1))
-typeCheck (Let NoRec bindings body) = do
-  --Type-check the bindings without any of the bindings in scope
-  sequence $ typeCheckBinding <$> bindings
-  mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
-  substBindings bindings <$> typeCheck body
-typeCheck (Let Rec bindings body) = do
-  mapM_ (mModify . uncurry insertCtx) (fst <$> bindings)
-  --Type-check the bindings with the bindings recursively in scope
-  sequence $ typeCheckBinding <$> bindings
-  --Don't let body of a letrec be a type
-  --TODO: Need to substitute bindings? What if non-terminating?
-  --      Use context returned from TC monad too?
-  notType body
 typeCheck (Case e xs) = do
   t <- typeCheck e
   dataname <- appData t

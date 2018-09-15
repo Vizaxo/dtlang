@@ -180,12 +180,6 @@ instance Arbitrary (Term) where
       shrink' (App a b) = [a, b] ++
                          [App a' b' | (a',b') <- shrink (a,b)]
       shrink' (Ty n) = []
-      shrink' (Let rec bindings body) =
-        [body] ++
-        fmap snd bindings ++
-        fmap (snd . fst) bindings ++
-        [Let rec bindings' body' | bindings' <- shrinkList shrinkBinding bindings
-                                 , body' <- shrink body]
       shrink' _ = []
 
 -- | A 'WellTyped' is a 'Term' that is well-typed.
