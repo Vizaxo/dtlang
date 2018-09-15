@@ -1,4 +1,4 @@
-module Lexer (Token (..), lexer) where
+module Lexer (Token (..), TokParser, lexer, expect) where
 
 import Control.Monad
 import Data.Foldable
@@ -24,7 +24,10 @@ data Token
   | Case
   | Of
   | Pipe
+  | Pi
   deriving (Eq, Show)
+
+type TokParser = Parsec [Token] ()
 
 reservedWords :: IsString s => [(s, Token)]
 reservedWords =
@@ -39,10 +42,11 @@ reservedWords =
   , ("case", Case)
   , ("of", Of)
   , ("|", Pipe)
+  , ("Pi", Pi)
   ]
 
 reserved :: Parser Token
-reserved = choice (parseReserved <$> reservedWords)
+reserved = choice (try . parseReserved <$> reservedWords)
   where
     parseReserved :: (String, t) -> Parser t
     parseReserved (s, t) = t <$ string s
@@ -76,3 +80,6 @@ tok :: Parser Token
 tok = many comment *> (reserved <|> identifier <|> capIdentifier <|> num)
 
 lexer = spaces *> sepBy tok spaces <* eof
+
+expect :: Token -> TokParser ()
+expect t = tokenPrim show (\p _ _ -> p) (\t' -> if (t' == t) then Just () else Nothing)

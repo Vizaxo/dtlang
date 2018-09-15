@@ -1,97 +1,68 @@
+-- | Convert the sexp tree into a @Term@ datatype.
 module Parser where
 
 import Lexer as L
+import Sexp
 import Types as T
 
 import Prelude hiding (pi)
+import Control.Applicative
 import Control.Monad
-import Data.Text
-import Text.Parsec
+import Data.Bifunctor
+import Data.Text hiding (map)
+import Text.Parsec hiding ((<|>))
 import Text.Parsec.Text
 
-type TokParser = Parsec [Token] ()
-
-expectedTok :: Token -> TokParser ()
-expectedTok t = tokenPrim show (\p _ _ -> p) (\t' -> if (t' == t) then Just () else Nothing)
+data LexerParserError
+  = ErrLex ParseError
+  | ErrParse
+  deriving Show
 
 identifier :: TokParser Name
 identifier = tokenPrim show (\p _ _ -> p) (\case
                                               Identifier s -> Just (Specified s)
                                               _ -> Nothing)
 
-capIdentifier :: TokParser Name
-capIdentifier = tokenPrim show (\p _ _ -> p) (\case
-                                                 CapIdent s -> Just (Specified s)
-                                                 _ -> Nothing)
+binding :: TokenTree -> Maybe Binding
+binding (SexpTree [Node (Identifier v), ty]) = (Specified v,) <$> term ty
+binding _ = Nothing
 
-num :: TokParser Integer
-num = tokenPrim show (\p _ _ -> p) (\case
-                                       Number n -> Just n
-                                       _ -> Nothing)
+var :: TokenTree -> Maybe Term
+var (SexpTree [Node (Identifier v)]) = Just (Var (Specified v))
+var _ = Nothing
 
-var :: TokParser Term
-var = Var <$> identifier
+lambda :: TokenTree -> Maybe Term
+lambda (SexpTree [Node Lambda, bind, body]) = Lam <$> binding bind <*> term body
+lambda _ = Nothing
 
-binding :: TokParser Binding
-binding = do
-  expectedTok OpenParen
-  v <- identifier
-  expectedTok HasType
-  ty <- term
-  expectedTok CloseParen
-  return (v, ty)
+pi :: TokenTree -> Maybe Term
+pi (SexpTree [Node L.Pi, bind, ret]) = T.Pi <$> binding bind <*> term ret
+pi _ = Nothing
 
-lambda :: TokParser Term
-lambda = do
-  expectedTok Lambda
-  b <- binding
-  expectedTok RightSingleArrow
-  body <- term
-  return (Lam b body)
+app :: TokenTree -> Maybe Term
+--TODO: consider multiple (uncurried) arguments
+app (SexpTree [f,x]) = App <$> term f <*> term x
+app _ = Nothing
 
-pi :: TokParser Term
-pi = do
-  b <- binding
-  expectedTok RightSingleArrow
-  res <- term
-  return (Pi b res)
+typeUniv :: TokenTree -> Maybe Term
+typeUniv (SexpTree [Node L.Type, Node (Number n)]) | n >= 0 = Just (Ty (fromInteger n))
+typeUniv _ = Nothing
 
-app :: TokParser Term
-app = do
-  --TODO: implement precedence rules to make this match
-  a <- parenthisedTerm
-  b <- term
-  return (App a b)
+case' :: TokenTree -> Maybe Term
+case' (SexpTree (Node L.Case:e:cs)) = T.Case <$> term e <*> sequence (map caseTerm cs)
+case' _ = Nothing
 
-typeUniv :: TokParser Term
-typeUniv = do
-  expectedTok L.Type
-  n <- num
-  guard (n >= 0)
-  return (Ty (fromInteger n))
+caseTerm :: TokenTree -> Maybe CaseTerm
+caseTerm (SexpTree [SexpTree (Node (CapIdent ctor):vars), body]) =
+  CaseTerm (Specified ctor) <$> sequence (map binding vars) <*> term body
+caseTerm _ = Nothing
 
-case' :: TokParser Term
-case' = do
-  expectedTok L.Case
-  e <- parenthisedTerm
-  expectedTok Of
-  terms <- many caseTerm
-  return (T.Case e terms)
+term :: TokenTree -> Maybe Term
+term t = lambda t <|> pi t <|> app t <|> typeUniv t <|> case' t <|> var t
+
+parser :: Text -> Either LexerParserError Term
+parser s = toTerm $ parse (sexpTree <* eof) "" =<< parse lexer "" s
   where
-    caseTerm :: TokParser CaseTerm
-    caseTerm = do
-      expectedTok Pipe
-      ctor <- capIdentifier
-      vars <- many binding
-      expectedTok RightDoubleArrow
-      e <- parenthisedTerm
-      return (CaseTerm ctor vars e)
-
-parenthisedTerm :: TokParser Term
-parenthisedTerm = between (expectedTok OpenParen) (expectedTok CloseParen) term
-
-term :: TokParser Term
-term = app <|> lambda <|> typeUniv <|> var <|> pi <|> case' <|> parenthisedTerm
-
-parser :: Text -> Either ParseError Term
-parser = parse lexer "" >=> parse (term <* eof) ""
+    toTerm :: Either ParseError TokenTree -> Either LexerParserError Term
+    toTerm (Left e) = Left (ErrLex e)
+    toTerm (Right t) = maybe (Left ErrParse) Right (term t)
