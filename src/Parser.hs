@@ -45,7 +45,7 @@ app (SexpTree [f,x]) = App <$> term f <*> term x
 app _ = Nothing
 
 typeUniv :: TokenTree -> Maybe Term
-typeUniv (SexpTree [Node L.Type, Node (Number n)]) | n >= 0 = Just (Ty (fromInteger n))
+typeUniv (SexpTree [Node Type, Node (Number n)]) | n >= 0 = Just (Ty (fromInteger n))
 typeUniv _ = Nothing
 
 case' :: TokenTree -> Maybe Term
@@ -64,12 +64,12 @@ definition _ = Nothing
 
 data' :: TokenTree -> Maybe DataDecl
 data' (SexpTree (Node Data : Node (Identifier name) : ty : ctors)) =
-  DataDecl (Specified name) <$> (T.Type <$> term ty) <*> sequence (map constructor ctors)
+  DataDecl (Specified name) <$> term ty <*> sequence (map constructor ctors)
 data' _ = Nothing
 
 constructor :: TokenTree -> Maybe (Constructor, Type)
 constructor (SexpTree [Node (Identifier name), ty])
-  = (Specified name,) . T.Type <$> term ty
+  = (Specified name,) <$> term ty
 constructor _ = Nothing
 
 term :: TokenTree -> Maybe Term

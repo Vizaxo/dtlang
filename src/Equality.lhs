@@ -137,17 +137,17 @@ Any other pairs of terms are not beta-equal.
 
 (λx:A.x) = (λy:A.y)
 
-> prop_eqIdAlpha (Type ty) x y = Lam (x,ty) (Var x) `isAlphaEq` Lam (y,ty) (Var y)
-> prop_eqIdBeta (Type ty) x y = Lam (x,ty) (Var x) `isBetaEq` Lam (y,ty) (Var y)
+> prop_eqIdAlpha ty x y = Lam (x,ty) (Var x) `isAlphaEq` Lam (y,ty) (Var y)
+> prop_eqIdBeta ty x y = Lam (x,ty) (Var x) `isBetaEq` Lam (y,ty) (Var y)
 
 The fst function (specialised to a generated type) should not be equal
 to the snd function.
 
-> prop_fstNotSndAlpha (Type t) a b =
+> prop_fstNotSndAlpha t a b =
 >   a /= b ==> not $ isAlphaEq
 >                      (Lam (a, t) (Lam (b, t) (Var a)))
 >                      (Lam (a, t) (Lam (b, t) (Var b)))
-> prop_fstNotSndBeta (Type t) a b =
+> prop_fstNotSndBeta t a b =
 >   a /= b ==> not $ isBetaEq
 >                      (Lam (a, t) (Lam (b, t) (Var a)))
 >                      (Lam (a, t) (Lam (b, t) (Var b)))
@@ -155,11 +155,11 @@ to the snd function.
 The type of the fst functinon should not be equal to the type of the
 snd function.
 
-> prop_fstNotSndTyAlpha (Type t) a b =
+> prop_fstNotSndTyAlpha t a b =
 >   a /= b ==> not $ isAlphaEq
 >                      (Pi (a, t) (Pi (b, t) (Var a)))
 >                      (Pi (a, t) (Pi (b, t) (Var b)))
-> prop_fstNotSndTyBeta (Type t) a b =
+> prop_fstNotSndTyBeta t a b =
 >   a /= b ==> not $ isBetaEq
 >                      (Pi (a, t) (Pi (b, t) (Var a)))
 >                      (Pi (a, t) (Pi (b, t) (Var b)))
@@ -222,7 +222,7 @@ Select the branch of a case expression matching the given constructor.
 Convert a type to whnf.
 
 > whnfTy :: Type -> TC Term
-> whnfTy (Type t) = whnf t
+> whnfTy t = whnf t
 
 Eta-expand a constructor, so that constructors are always fully applied.
 The type is assumed to be in whnf.
@@ -231,7 +231,7 @@ The type is assumed to be in whnf.
 >   :: (MonadError TypeError m, MonadMultiGet Context m)
 >   => Constructor -> m Term
 > partiallyApplyCtor c = do
->   (Type ty) <- lookupCtor c
+>   ty <- lookupCtor c
 >   return $ partiallyApplyCtor' c ty []
 >   where
 >     partiallyApplyCtor' c (Pi (x,ty) ret) args

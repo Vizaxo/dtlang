@@ -47,7 +47,7 @@ testTermProp name prop = testGroup name
   ]
 
 testTyProp :: Testable p => String -> (Type -> p) -> TestTree
-testTyProp name prop = QC.testProperty name (forAll (Type . fromJust <$> genTermAtCtx (Ty 0) defaultCtx') prop)
+testTyProp name prop = QC.testProperty name (forAll (fromJust <$> genTermAtCtx (Ty 0) defaultCtx') prop)
 
 evaluator :: TestTree
 evaluator = testGroup "evaluator"

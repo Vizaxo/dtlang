@@ -21,7 +21,7 @@ wellTyped = succeeded . typeCheck
 typeCheck :: Term -> TC Term
 typeCheck (Var v) = fromCtx v
 typeCheck (Ctor c args) = do
-  (Type ty) <- lookupCtor c
+  ty <- lookupCtor c
   tcArgList ty args
 typeCheck (Lam (x,xTy) body) = do
   typeCheck xTy >>= whnf >>= \case
@@ -61,7 +61,7 @@ typeCheck (Case e xs) = do
   dataname <- appData t
   datatype@(DataDecl name ty ctors) <- lookupData dataname
   --TODO: use sets instead of lists
-  let datactors = over _2 unType <$> (sortBy (comparing fst) ctors)
+  let datactors = sortBy (comparing fst) ctors
   let casectors = sortBy (comparing ctConstructor) $ xs
   caseTys <- zipWithM (tcCase datatype) datactors casectors
   --TODO: check if empty cases work
@@ -93,7 +93,7 @@ tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constr
 -- | Type-check a data declaration. If successful, it adds the type
 -- and constructors to the context.
 typeCheckData :: DataDecl -> TC ()
-typeCheckData d@(DataDecl name (Type ty) cs) = do
+typeCheckData d@(DataDecl name ty cs) = do
   --TODO: propogating the context like state is just wrong? go back to reader?
   nameUnique name
   isolateCtx $ isType ty
@@ -103,7 +103,7 @@ typeCheckData d@(DataDecl name (Type ty) cs) = do
   mModify $ insertDataDecl d
 
   where
-    typeCheckC (c, (Type cTy)) = do
+    typeCheckC (c, cTy) = do
       isType cTy
       cTy' <- whnf cTy
       returnsData name cTy'
@@ -132,7 +132,7 @@ nameUnique n = do
 
 -- | Check that a given term has the given type.
 hasType :: Term -> Type -> TC ()
-hasType t (Type target) = do
+hasType t target = do
   ctx <- mGet
   tTy <- typeCheck t
   extendTypeError (target `betaEq` tTy)

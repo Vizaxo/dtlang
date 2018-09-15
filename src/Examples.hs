@@ -59,9 +59,9 @@ pair = (Lam (toEnum 0, (Ty 0))
 nat :: DataDecl
 nat = DataDecl
   (Specified "Nat")
-  (Type (Ty 0))
-  ([(Specified "Zero", Type $ Var (Specified "Nat"))
-    ,(Specified "Succ", Type $
+  (Ty 0)
+  ([(Specified "Zero", Var (Specified "Nat"))
+    ,(Specified "Succ",
        Pi (Specified "x",Var (Specified "Nat"))
          (Var (Specified "Nat")))])
 
@@ -75,13 +75,13 @@ succ' = v "Succ"
 list :: DataDecl
 list = DataDecl
   (Specified "List")
-  (Type (Pi (Specified "a", (Ty 0)) (Ty 0)))
+  (Pi (Specified "a", (Ty 0)) (Ty 0))
   -- Nil : List a
-  ([(Specified "Nil", Type $
+  ([(Specified "Nil",
      Pi (Specified "a", (Ty 0)) $
       App (Var (Specified "List")) (Var (Specified "a")))
   -- Cons : (a:(Ty 0)) -> (x:a) -> (xs:List a) -> List a
-  ,(Specified "Cons", Type $
+  ,(Specified "Cons",
      Pi (Specified "a",(Ty 0)) $
       Pi (Specified "x",Var (Specified "a")) $
        Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
@@ -94,13 +94,13 @@ cons = v "Cons"
 vect :: DataDecl
 vect = DataDecl
   (Specified "Vect")
-  (Type (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", (Ty 0)) (Ty 0))))
+  (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", (Ty 0)) (Ty 0)))
   -- VNil : Vect 0 a
-  ([(Specified "VNil", Type $
+  ([(Specified "VNil",
      Pi (Specified "a", (Ty 0)) $
       (Var (Specified "Vect")) `App` (Var (Specified "Zero")) `App` (Var (Specified "a")))
   -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect n a) -> Vect (S n) a
-   ,(Specified "VCons", Type $
+   ,(Specified "VCons",
       Pi (Specified "a",(Ty 0)) $
        Pi (Specified "n",(Var (Specified "Nat"))) $
         Pi (Specified "x",Var (Specified "a")) $
@@ -129,17 +129,16 @@ patternMatchNat
 void :: DataDecl
 void = DataDecl
   (Specified "Void")
-  (Type (Ty 0))
+  (Ty 0)
   []
 
 sigma :: DataDecl
 sigma = DataDecl
   (Specified "Sigma")
-  (Type $
-    (var "a", (Ty 0))
+  ((var "a", (Ty 0))
     --> (var "b", (var "x", v "a") --> (Ty 0))
     --> (Ty 0))
-  [(var "MkSigma", Type $
+  [(var "MkSigma",
      (var "a", (Ty 0))
      --> (var "b", (var "ignored", v "a") --> (Ty 0))
      --> (var "x", v "a")

@@ -27,7 +27,7 @@ genTargetTy (Ty n) _ _ = sized $ \size -> if size < (-1) then mzero else return 
 genTargetTy _  _ _ = mzero
 
 genTargetDataType :: GenTerm
-genTargetDataType target ctx _ = elements' $ map (Var . name) $ filter (isBetaEq target . unType . ty) (datatypes ctx)
+genTargetDataType target ctx _ = elements' $ map (Var . name) $ filter (isBetaEq target . ty) (datatypes ctx)
 
 elements' [] = mzero
 elements' xs = elements xs
@@ -95,7 +95,7 @@ pickGen xs target ctx avoid = do
   assertRight (runTC $ mSet ctx >> isType target') "target is not a type"
   res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
   assertRight
-    (runTC $ mSet ctx >> hasType res (Type target'))
+    (runTC $ mSet ctx >> hasType res target')
     $  "generated term doesn't have target type:\n"
     <> "the term\n"
     <> show res <> "\n"

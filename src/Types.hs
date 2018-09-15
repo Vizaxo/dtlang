@@ -58,10 +58,9 @@ data CaseTerm = CaseTerm
   }
   deriving (Eq, Show)
 
--- | 'Type' is a synonym for 'Term', which can have its own
--- 'Arbitrary' implementation.
-newtype Type = Type { unType :: Term }
-  deriving (Eq, Show)
+-- | @Type@ is just a synonym for @Term@, allowing slightly more
+-- informative documentation where needed.
+type Type = Term
 
 -- | Determines whether a let(rec) expression is a let or a letrec.
 data IsRec = Rec | NoRec
