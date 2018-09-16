@@ -6,19 +6,19 @@ import Term
 import Types
 import Utils
 
+import Control.Lens hiding (Context)
 import Control.Monad.Except
-import Control.Monad.Trans.MultiState
+import Control.Monad.Reader
 import Data.List
 import Data.Ord
-import Control.Lens hiding (Context)
 
 -- | Predicate of whether a given term is well-typed in the given context.
-wellTyped :: Term -> Bool
-wellTyped = succeeded . typeCheck
+wellTyped :: Context -> Term -> Bool
+wellTyped ctx = succeeded ctx . typeCheck
 
 -- | Check the type of a term in the given context. Returns the type
 -- if the term is well-typed, and gives an error otherwise.
-typeCheck :: Term -> TC Term
+typeCheck :: Term -> TC Type
 typeCheck (Var v) = fromCtx v
 typeCheck (Ctor c args) = do
   ty <- lookupCtor c
@@ -79,15 +79,17 @@ tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constr
 
 -- | Type-check a data declaration. If successful, it adds the type
 -- and constructors to the context.
-typeCheckData :: DataDecl -> TC ()
+typeCheckData :: DataDecl -> TC Context
 typeCheckData d@(DataDecl name ty cs) = do
-  --TODO: propogating the context like state is just wrong? go back to reader?
-  nameUnique name
-  isolateCtx $ isType ty
-  mModify (insertCtx name ty)
-  bs <- mapM (isolateCtx . typeCheckC) cs
-  mapM_ (\(n,t) -> nameUnique n >> mModify (insertCtx n t)) bs
-  mModify $ insertDataDecl d
+  ask >>= \ctx -> nameNotDefined ctx name
+  isType ty
+  local (insertCtx name ty) $ do
+    bs <- mapM typeCheckC cs
+    ctx <- ask
+    mapM_ (nameNotDefined ctx) (fst <$> bs)
+    when (hasDuplicates (fst <$> bs))
+      (throwError $ TypeError [PS "Duplicate constructors in", PN name])
+    return (insertDataDecl d $ foldr (\(n,t) -> insertCtx n t) ctx bs)
 
   where
     typeCheckC (c, cTy) = do
@@ -110,9 +112,8 @@ appData (Var retName) = return retName
 appData _ = throwError $ TypeError [PS "AppData not applied to a type constructed from a type constructor"]
 
 -- | Check that a given name does not already occur in the context.
-nameUnique :: Name -> TC ()
-nameUnique n = do
-  ctx <- mGet @Context
+nameNotDefined :: MonadError TypeError m => Context -> Name -> m ()
+nameNotDefined ctx n = do
   case lookupCtx n ctx of
     Nothing -> success
     Just _ -> throwError $ TypeError [PS "The name", PN n, PS "is already defined"]
@@ -120,14 +121,14 @@ nameUnique n = do
 -- | Check that a given term has the given type.
 hasType :: Term -> Type -> TC ()
 hasType t target = do
-  ctx <- mGet
+  ctx <- ask
   tTy <- typeCheck t
   extendTypeError (target `betaEq` tTy)
     [PS "while checking if", PT t, PS "has type", PT tTy
     ,PS "in the context", PC ctx]
 
 fromCtx v = do
-  ctx <- mGet
+  ctx <- ask
   case lookupCtx v ctx of
     Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
     Just ty -> return ty
@@ -154,6 +155,7 @@ typeCheckBinding ((x,xTy),val) = do
   betaEq xTy ty
 
 -- | Type-check a term and insert it into the context.
+checkAndInsert :: Name -> Term -> TC Context
 checkAndInsert name term = do
-  isolateCtx $ typeCheck term
-  mModify (insertCtx name term)
+  ty <- typeCheck term
+  insertCtx name ty . insertEnv name term <$> ask

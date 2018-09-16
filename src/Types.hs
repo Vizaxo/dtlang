@@ -63,7 +63,8 @@ type Type = Term
 
 -- | A map from variables to their types.
 data Context = Context
-  { getCtx :: [(Name, Term)]
+  { getCtx :: [(Name, Type)]
+  , getEnv :: [(Name, Term)]
   , datatypes :: [DataDecl]
   }
   deriving (Eq, Show)

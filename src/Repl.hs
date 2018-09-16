@@ -1,5 +1,6 @@
 module Main where
 
+import Examples
 import Interpret
 import Parser
 import TC
@@ -14,17 +15,19 @@ import qualified Data.Text as T
 data ReplError
   = ErrLexParse LexerParserError
   | ErrType TypeError
+  | ErrCtx TypeError
   | ErrRun TypeError
   | Unsupported
   deriving Show
 
-command :: Text -> Either ReplError (Term, Term)
+command :: Text -> Either ReplError (Term, Type)
 command s = do
   (first ErrLexParse $ replParser s) >>= \case
     Left _ -> Left Unsupported
     Right t -> do
-      ty <- first ErrType $ runTC $ typeCheck t
-      term <- first ErrRun $ interpret emptyCtx t
+      ctx <- first ErrCtx defaultCtx
+      ty <- first ErrType $ runTC ctx (typeCheck t)
+      term <- first ErrRun $ interpret ctx t
       return (term, ty)
 
 showCommand :: Either ReplError (Term, Term) -> String

@@ -40,7 +40,6 @@ executable dtlang-repl
                      , dtlang
                      , lens
                      , mtl
-                     , multistate
                      , natural-numbers
                      , parsec
                      , recursion-schemes

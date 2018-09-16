@@ -13,13 +13,12 @@ import Control.Lens hiding (Context, elements)
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.MultiState
 import Data.Maybe
 import Data.Natural hiding (view)
 import QuickCheck.GenT
 import Test.QuickCheck (Property, Arbitrary, arbitrary, shrink, Gen, shrinkList, collect, (===))
 
-type GenTerm = Term -> Context -> [Name] -> BackTrackGen (Term)
+type GenTerm = Term -> Context -> [Name] -> BackTrackGen Term
 
 genTargetTy :: GenTerm
 genTargetTy (Ty 0) _ _ = mzero
@@ -27,7 +26,7 @@ genTargetTy (Ty n) _ _ = sized $ \size -> if size < (-1) then mzero else return 
 genTargetTy _  _ _ = mzero
 
 genTargetDataType :: GenTerm
-genTargetDataType target ctx _ = elements' $ map (Var . name) $ filter (isBetaEq target . ty) (datatypes ctx)
+genTargetDataType target ctx _ = elements' $ map (Var . name) $ filter (isBetaEq ctx target . ty) (datatypes ctx)
 
 elements' [] = mzero
 elements' xs = elements xs
@@ -35,7 +34,7 @@ elements' xs = elements xs
 genTargetVar :: GenTerm
 genTargetVar target ctx _ = sized $ \size -> if size < (-1)
   then mzero
-  else elements' $ Var . fst <$> filter (isBetaEq target . snd) (getCtx ctx)
+  else elements' $ Var . fst <$> filter (isBetaEq ctx target . snd) (getCtx ctx)
 
 fresh :: Context -> [Name] -> Name
 fresh ctx avoid = toEnum $ 1 + (maximumOr (-1) $ fromEnum <$> (fst <$> getCtx ctx) ++ avoid)
@@ -89,13 +88,13 @@ genTargetApp target ctx avoid = sized $ \size -> genTargetApp' (min size 3)
     maxSize s g = scale (`min` s) g
 
 pickGen xs target ctx avoid = do
-  target' <- case runTC $ mSet ctx >> whnf target of
+  target' <- case runTC ctx $ whnf target of
     Left e -> error $ "whnf failed during generation: " <> show e <> "in the context " <> show ctx <> "\nWhen trying to whnf " <> show target
     Right t -> return t
-  assertRight (runTC $ mSet ctx >> isType target') "target is not a type"
+  assertRight (runTC ctx (isType target')) "target is not a type"
   res <- freqBacktrack $ ((mkGen target' <$>) <$>) (filter ((/= 0) . view _1) xs)
   assertRight
-    (runTC $ mSet ctx >> hasType res target')
+    (runTC ctx (hasType res target'))
     $  "generated term doesn't have target type:\n"
     <> "the term\n"
     <> show res <> "\n"
@@ -116,7 +115,7 @@ genTarget target ctx avoid = do
            , (0, genTargetApp)
            ] target ctx avoid
   --TODO: add indir rule
-  unless (succeeded (mSet ctx >> typeCheck res))
+  unless (wellTyped ctx res)
     (error ("Generated term is not well-typed:" <> show res))
   return res
 
@@ -145,9 +144,9 @@ atUniverseLevel u ctx = scale (+1) . backtrackUntilSuccess $ do
   -- TODO: don't use max here; should be able to properly backtrack over generation of the type
   ty <- scale (max 2 . (`div` 20)) $ genTarget (Ty u) ctx []
   term <- scale (max 2 . (`div` 10)) $ genTarget ty ctx []
-  unless (succeeded (mSet ctx >> typeCheck ty))
+  unless (wellTyped ctx ty)
     (error ("atUniverseLevel: Generated type is not well-typed:" <> show ty))
-  unless (succeeded (mSet ctx >> typeCheck term))
+  unless (wellTyped ctx term)
     (error ("atUniverseLevel: Generated term is not well-typed:" <> show term))
   return term
 
@@ -157,6 +156,7 @@ genTermAtCtx ty ctx = scale (max 2 . (`div` 10)) $ runBackTrackGen (genTarget ty
 genTermAt :: Term -> Gen (Maybe Term)
 genTermAt ty = runBackTrackGen (genTarget ty emptyCtx [])
 
+prop_wellTyped :: Context -> Term -> Bool
 prop_wellTyped = wellTyped
 
 -- | A helper function for 'shrink' on 'Term's.
@@ -199,4 +199,4 @@ instance Arbitrary Name where
 
 instance Arbitrary Context where
   --TODO: arbitrary data declarations
-  arbitrary = Context <$> arbitrary <*> pure []
+  arbitrary = Context <$> arbitrary <*> arbitrary <*> pure []

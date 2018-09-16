@@ -45,7 +45,6 @@ extra-deps:
 - lens-4.17
 - logict-state-0.1.0.4
 - mtl-2.2.2
-- multistate-0.8.0.0
 - natural-numbers-0.1.2.0
 - parsec-3.1.13.0
 - random-1.1

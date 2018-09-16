@@ -6,7 +6,7 @@
 > import Utils
 
 > import Control.Monad.Except
-> import Control.Monad.Trans.MultiState
+> import Control.Monad.Reader
 > import Data.Either
 > import Data.Maybe
 > import Test.QuickCheck
@@ -24,7 +24,7 @@ Alpha equality of terms.
 
 If two terms are syntactially equal, they are alpha-euqal.
 
-> a `alphaEq` b | (a `isSyntaxEq` b) = success
+> a `alphaEq` b | a == b = success
 
 If two terms' sub-terms are alpha equal, and the top-level term
 doesn't contain any variables, then the terms are alpha-equal.
@@ -40,21 +40,18 @@ Two lambda or pi expressions are alpha equal if
 
 > lamA@(Lam (x,tyX) a) `alphaEq` lamB@(Lam (y,tyY) b) = do
 >   tyX `alphaEq` tyY
->   mModify (insertCtx x tyX)
->   mModify (insertCtx y tyY)
->   z <- fresh (allVars lamA ++ allVars lamB)
->   ctx <- mGet @Context
->   let a' = subst x (Var z) a
->   let b' = subst y (Var z) b
->   a' `alphaEq` b'
+>   local (insertCtx x tyX . insertCtx y tyY) $ do
+>     z <- fresh (allVars lamA ++ allVars lamB)
+>     let a' = subst x (Var z) a
+>     let b' = subst y (Var z) b
+>     a' `alphaEq` b'
 > piA@(Pi (x,tyX) a) `alphaEq` piB@(Pi (y,tyY) b) = do
 >   tyX `alphaEq` tyY
->   mModify (insertCtx x tyX)
->   mModify (insertCtx y tyY)
->   z <- fresh (allVars piA ++ allVars piB)
->   let a' = subst x (Var z) a
->   let b' = subst y (Var z) b
->   a' `alphaEq` b'
+>   local (insertCtx x tyX . insertCtx y tyY) $ do
+>     z <- fresh (allVars piA ++ allVars piB)
+>     let a' = subst x (Var z) a
+>     let b' = subst y (Var z) b
+>     a' `alphaEq` b'
 
 Two free variables are only alpha-equal if they are the same
 variable. If the variables were bound, the rule for binders will make
@@ -86,15 +83,16 @@ with 'a'.
 
 If two terms are alpha-equal, then they are also beta-equal.
 
-> betaEq a b | a `isAlphaEq` b = success
+> betaEq a b | eq = success
 
 Evaluate both terms to whnf, then compare their heads with the betaEq'
 helper function.
 
 >            | otherwise = do
->   a' <- whnf a
->   b' <- whnf b
->   betaEq' a' b'
+>                a' <- whnf a
+>                b' <- whnf b
+>                betaEq' a' b'
+>   where eq = isAlphaEq emptyCtx a b --TODO: should this have the full context?
 
 A helper function for comparing two terms which are in whnf.
 
@@ -104,28 +102,27 @@ If the whnf terms are alpha-equal, then the terms are also
 beta-equal. This covers the cases for the non-recursive terms (Var and
 Pi).
 
-> betaEq' a b | a `isAlphaEq` b = success
+> betaEq' a b | eq = success
+>   where eq = isAlphaEq emptyCtx a b --TODO: should this have the full context?
 
 If the terms have the same head, recursively compare their
 sub-structures.
 
 > lamA@(Lam (x,tyX) a) `betaEq'` lamB@(Lam (y,tyY) b) = do
 >   tyX `betaEq` tyY
->   mModify (insertCtx x tyX)
->   mModify (insertCtx y tyY)
->   z <- fresh (allVars lamA ++ allVars lamB)
->   ctx <- mGet @Context
->   let a' = subst x (Var z) a
->   let b' = subst y (Var z) b
->   a' `betaEq` b'
+>   local (insertCtx x tyX . insertCtx y tyY) $ do
+>     z <- fresh (allVars lamA ++ allVars lamB)
+>     ctx <- ask
+>     let a' = subst x (Var z) a
+>     let b' = subst y (Var z) b
+>     a' `betaEq` b'
 > piA@(Pi (x,tyX) a) `betaEq'` piB@(Pi (y,tyY) b) = do
 >   tyX `betaEq` tyY
->   mModify (insertCtx x tyX)
->   mModify (insertCtx y tyY)
->   z <- fresh (allVars piA ++ allVars piB)
->   let a' = subst x (Var z) a
->   let b' = subst y (Var z) b
->   a' `betaEq` b'
+>   local (insertCtx x tyX . insertCtx y tyY) $ do
+>     z <- fresh (allVars piA ++ allVars piB)
+>     let a' = subst x (Var z) a
+>     let b' = subst y (Var z) b
+>     a' `betaEq` b'
 
 The terms have been evaluated to whnf, so there cannot be any App terms.
 Any other pairs of terms are not beta-equal.
@@ -133,22 +130,22 @@ Any other pairs of terms are not beta-equal.
 > a `betaEq'` b = throwError $ TypeError
 >   [PS "The terms", PT a, PS "and", PT b, PS "are not beta-equal."]
 
-> isBetaEq' = succeeded .: betaEq'
+> --isBetaEq' = succeeded .: betaEq'
 
 (λx:A.x) = (λy:A.y)
 
-> prop_eqIdAlpha ty x y = Lam (x,ty) (Var x) `isAlphaEq` Lam (y,ty) (Var y)
-> prop_eqIdBeta ty x y = Lam (x,ty) (Var x) `isBetaEq` Lam (y,ty) (Var y)
+> prop_eqIdAlpha ty x y = isAlphaEq emptyCtx (Lam (x,ty) (Var x)) (Lam (y,ty) (Var y))
+> prop_eqIdBeta ty x y = isBetaEq emptyCtx (Lam (x,ty) (Var x)) (Lam (y,ty) (Var y))
 
 The fst function (specialised to a generated type) should not be equal
 to the snd function.
 
 > prop_fstNotSndAlpha t a b =
->   a /= b ==> not $ isAlphaEq
+>   a /= b ==> not $ isAlphaEq emptyCtx
 >                      (Lam (a, t) (Lam (b, t) (Var a)))
 >                      (Lam (a, t) (Lam (b, t) (Var b)))
 > prop_fstNotSndBeta t a b =
->   a /= b ==> not $ isBetaEq
+>   a /= b ==> not $ isBetaEq emptyCtx
 >                      (Lam (a, t) (Lam (b, t) (Var a)))
 >                      (Lam (a, t) (Lam (b, t) (Var b)))
 
@@ -156,11 +153,11 @@ The type of the fst functinon should not be equal to the type of the
 snd function.
 
 > prop_fstNotSndTyAlpha t a b =
->   a /= b ==> not $ isAlphaEq
+>   a /= b ==> not $ isAlphaEq emptyCtx
 >                      (Pi (a, t) (Pi (b, t) (Var a)))
 >                      (Pi (a, t) (Pi (b, t) (Var b)))
 > prop_fstNotSndTyBeta t a b =
->   a /= b ==> not $ isBetaEq
+>   a /= b ==> not $ isBetaEq emptyCtx
 >                      (Pi (a, t) (Pi (b, t) (Var a)))
 >                      (Pi (a, t) (Pi (b, t) (Var b)))
 
@@ -168,7 +165,7 @@ Evaluate a term to weak-head normal-form. This assumes that the given
 term type-checks. The resulting term will have the same type as the
 input term.
 
-> whnf :: (MonadError TypeError m, MonadMultiGet Context m) => Term -> m Term
+> whnf :: (MonadError TypeError m, MonadReader Context m) => Term -> m Term
 
 An application term can be reduced by applying the function to the
 argument.
@@ -228,7 +225,7 @@ Eta-expand a constructor, so that constructors are always fully applied.
 The type is assumed to be in whnf.
 
 > partiallyApplyCtor
->   :: (MonadError TypeError m, MonadMultiGet Context m)
+>   :: (MonadError TypeError m, MonadReader Context m)
 >   => Constructor -> m Term
 > partiallyApplyCtor c = do
 >   ty <- lookupCtor c
@@ -241,17 +238,16 @@ The type is assumed to be in whnf.
 
 Helper functions for using these equalities in different contexts
 
-> isSyntaxEq = succeeded .: syntaxEq
-> isAlphaEq = succeeded .: alphaEq
-> isBetaEq = succeeded .: betaEq
+> isAlphaEq ctx = succeeded ctx .: alphaEq
+> isBetaEq ctx = succeeded ctx .: betaEq
 >
-> tcBetaEq :: TC Term -> TC Term -> Bool
-> tcBetaEq a b = succeeded $ do
+> tcBetaEq :: Context -> TC Term -> TC Term -> Bool
+> tcBetaEq ctx a b = succeeded ctx $ do
 >   a' <- a
 >   b' <- b
 >   a' `betaEq` b'
 
 Run a TC computation, reporting if it succeded.
 
-> succeeded :: TC a -> Bool
-> succeeded = isRight . runTC
+> succeeded :: Context -> TC a -> Bool
+> succeeded = isRight .: runTC

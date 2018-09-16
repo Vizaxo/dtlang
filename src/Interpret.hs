@@ -6,7 +6,7 @@ import TC
 import Types
 
 import Control.Monad.Except
-import Control.Monad.Trans.MultiState
+import Control.Monad.Reader
 
 interpret :: MonadError TypeError m => Context -> Term -> m Term
-interpret ctx = runMultiStateTNil . withMultiStateA ctx . whnf
+interpret ctx = flip runReaderT ctx . whnf

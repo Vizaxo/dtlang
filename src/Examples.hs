@@ -4,31 +4,29 @@ import TC
 import Types
 import TypeCheck
 
+import Control.Monad.Reader hiding (void)
 import Data.Either
 
 defaultCtx :: Either TypeError Context
-defaultCtx = getCtxTC $
-  checkAndInsert (Specified "id") id' >>
-  checkAndInsert (Specified "fst") fst' >>
-  checkAndInsert (Specified "snd") snd' >>
-  checkAndInsert (Specified "pair") pair >>
-  typeCheckData nat >>
-  typeCheckData list >>
-  typeCheckData vect >>
-  typeCheckData void >>
+defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
+  checkAndInsert (Specified "id") id' `bindCtx`
+  checkAndInsert (Specified "fst") fst' `bindCtx`
+  checkAndInsert (Specified "snd") snd' `bindCtx`
+  checkAndInsert (Specified "pair") pair `bindCtx`
+  typeCheckData nat `bindCtx`
+  typeCheckData list `bindCtx`
+  typeCheckData vect `bindCtx`
+  typeCheckData void `bindCtx`
   typeCheckData sigma
+  where
+    infixl 5 `bindCtx`
+    bindCtx :: TC Context -> TC a -> TC a
+    bindCtx ctxM m = ctxM >>= \ctx -> local (const ctx) m
 
 -- | id : (t:(Ty 0)) -> t -> t
 --   id = \t. \a. a
 id' :: Term
 id' = Lam (toEnum 0, (Ty 0)) (Lam (toEnum 1, Var (toEnum 0)) (Var (toEnum 1)))
-
-unsafeGetType :: Term -> Term
-unsafeGetType = fromRight undefined . runTC . typeCheck
-
--- | Apply a term to id, automatically substituting in the term's type.
-appId :: Term -> Term
-appId t = (id' `App` unsafeGetType t) `App` t
 
 -- | fst : (t:(Ty 0)) -> t -> t -> t
 --   fst = \t. \a. \b. a

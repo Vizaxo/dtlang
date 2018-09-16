@@ -5,7 +5,8 @@
 
 > import Control.Lens hiding (Context)
 > import Control.Monad.Except
-> import Control.Monad.Trans.MultiState
+> import Control.Monad.Reader
+> import Control.Monad.State
 > import Data.Either
 > import Data.Maybe
 
@@ -13,15 +14,19 @@ The TC monad is where all type-checking is done.
 
 > type TC a =
 
-It keeps track of the next generated (as opposed to user-specified)
-variable to use, and the current context.
+The context maps free variables to their types.
 
->   (MultiStateT '[GenVar, Context]
+>   (ReaderT Context
+
+It keeps track of the next generated (as opposed to user-specified)
+variable to use.
+
+>   (StateT GenVar
 
 It will short-circuit when a type error is thrown, which can then be
 printed to show the user.
 
->   (Except TypeError)) a
+>   (Except TypeError))) a
 
 Type errors are represented as a list of printing directives. In
 future this will also contain other information, such as the error
@@ -43,18 +48,7 @@ location in the source code.
 The context can be extended with a new binding.
 
 > extendCtx :: Binding -> TC a -> TC a
-> extendCtx (n,v) ma = do
->   mModify (insertCtx n v)
->   ma
-
-Run a TC computation without extending the context of the parent.
-
-> isolateCtx :: TC a -> TC a
-> isolateCtx ma = do
->   ctx <- mGet @Context
->   res <- ma
->   mSet ctx
->   return res
+> extendCtx (n,v) = local (insertCtx n v)
 
 We need a way to generate variables that are guaranteed to be fresh.
 
@@ -63,11 +57,11 @@ used.
 
 > fresh :: [Name] -> TC Name
 > fresh avoid = do
->   v <- mGet @GenVar
->   ctx <- mGet @Context
+>   v <- get
+>   ctx <- ask
 >   let existingGens = catMaybes $ (fromEnum <$>) . getGen <$> (fst <$> (getCtx ctx)) ++ avoid
 >   let nextVar = toEnum $ max (fromEnum v) (1 + maximumOr (-1) (existingGens))
->   mSet $ succ nextVar
+>   put $ succ nextVar
 >   return $ Generated nextVar
 >   where getGen (Generated v) = Just v
 >         getGen _ = Nothing
@@ -76,8 +70,7 @@ Fresh should produce a variable that is not already present in the
 context.
 
 > prop_freshIsFresh :: Context -> [Name] -> Bool
-> prop_freshIsFresh ctx existing = isRight $ runTC $ do
->   mSet ctx
+> prop_freshIsFresh ctx existing = isRight $ runTC ctx $ do
 >   z <- fresh existing
 >   case elem z existing of
 >     True -> throwError $ InternalError []
@@ -101,30 +94,33 @@ This can be useful to add more context to error messages.
 We start with an empty context.
 
 > emptyCtx :: Context
-> emptyCtx = Context [] []
+> emptyCtx = Context [] [] []
 
 > lookupCtx :: Name -> Context -> Maybe Term
-> lookupCtx n (Context ctx _) = lookup n ctx
+> lookupCtx n (Context ctx _ _) = lookup n ctx
 
 > insertCtx :: Name -> Term -> Context -> Context
-> insertCtx n t (Context ctx ds) = Context ((n,t):ctx) ds
+> insertCtx n t (Context ctx env ds) = Context ((n,t):ctx) env ds
+
+> insertEnv :: Name -> Term -> Context -> Context
+> insertEnv n t (Context ctx env ds) = Context ctx ((n,t):env) ds
 
 > insertDataDecl :: DataDecl -> Context -> Context
-> insertDataDecl d (Context ctx ds) = Context ctx (d:ds)
+> insertDataDecl d (Context ctx env ds) = Context ctx env (d:ds)
 
 > lookupData' :: Name -> Context -> Maybe DataDecl
-> lookupData' n (Context _ ds) = listToMaybe $ filter (\(DataDecl n' _ _) -> n == n') ds
+> lookupData' n (Context _ _ ds) = listToMaybe $ filter (\(DataDecl n' _ _) -> n == n') ds
 
 > lookupData :: Name -> TC DataDecl
 > lookupData n = do
->   ctx <- mGet
+>   ctx <- ask
 >   case lookupData' n ctx of
 >     Nothing -> throwError $ TypeError [PS "Type", PN n, PS "not found in context."]
 >     Just d -> return d
 
-> lookupCtor :: (MonadError TypeError m, MonadMultiGet Context m) => Constructor -> m Type
+> lookupCtor :: (MonadError TypeError m, MonadReader Context m) => Constructor -> m Type
 > lookupCtor c = do
->   Context ctx ds <- mGet
+>   Context ctx _ ds <- ask
 >   case listToMaybe $ catMaybes $ map findCtor ds of
 >     Nothing -> throwError $ TypeError [PS "No constructor named", PN c, PS "in context"]
 >     Just ty -> return ty
@@ -132,22 +128,25 @@ We start with an empty context.
 
 Run the TC monad, outputting all information. This is useful for debugging purposes.
 
-> debugTC :: TC a -> Either TypeError (a, GenVar, Context)
-> debugTC = ((\((a,b),c) -> (a,b,c)) <$>) . runExcept . runMultiStateTNil . withMultiStateAS emptyCtx . withMultiStateAS (toEnum @GenVar 0)
+> debugTC :: Context -> TC a -> Either TypeError (a, GenVar)
+> debugTC ctx = runExcept . flip runStateT (toEnum @GenVar 0) . flip runReaderT ctx
 
 Get the context that was generated from a TC computation.
 
-> getCtxTC :: TC a -> Either TypeError Context
-> getCtxTC = ((^. _3) <$>) . debugTC
+> getCtxTC :: Context -> TC Context -> Either TypeError Context
+> getCtxTC = ((^. _1) <$>) .: debugTC
 
 We can run the TC monad. If a TypeError has occured elsewhere this
 will be returned. Otherwise, we get the pure value back.
 
-> runTC :: TC a -> Either TypeError a
-> runTC = ((^. _1) <$>) . debugTC
+> runTC :: Context -> TC a -> Either TypeError a
+> runTC ctx = ((^. _1) <$>) . (debugTC ctx)
+
+> retRead :: MonadReader r m => m a -> m (a, r)
+> retRead m = (,) <$> m <*> ask
 
 For functions returning a `TC ()`, writing `success` is clearer than
 writing `return ()`.
 
-> success :: TC ()
+> success :: Monad m => m ()
 > success = return ()
