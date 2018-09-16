@@ -13,41 +13,19 @@ build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
 
---executable dtlang
-  --hs-source-dirs:      src
-  --main-is:             Main.hs
-  --default-language:    Haskell2010
-  --build-depends:       base >= 4.7 && < 5
-
 executable dtlang-repl
-  hs-source-dirs:      src
-  main-is:             Repl.hs
+  hs-source-dirs:      bin/repl
+  main-is:             Main.hs
   default-language:    Haskell2010
-  default-extensions:  DataKinds
-                     , FlexibleContexts
-                     , FlexibleInstances
-                     , GeneralizedNewtypeDeriving
-                     , LambdaCase
-                     , MultiParamTypeClasses
-                     , OverloadedStrings
-                     , PatternSynonyms
-                     , ScopedTypeVariables
-                     , StandaloneDeriving
-                     , TupleSections
-                     , TypeApplications
+  default-extensions:  LambdaCase
   build-depends:       base >= 4.7 && < 5
                      , QuickCheck
-                     , deriving-compat
                      , dtlang
-                     , lens
                      , mtl
-                     , natural-numbers
-                     , parsec
-                     , recursion-schemes
                      , text
 
 library
-  hs-source-dirs:      src
+  hs-source-dirs:      lib
   default-language:    Haskell2010
   default-extensions:  DataKinds
                      , DeriveFunctor
@@ -74,6 +52,10 @@ library
                      , text
   exposed-modules:     Equality
                      , Examples
+                     , Interpret
+                     , Lexer
+                     , Parser
+                     , Sexp
                      , TC
                      , Term
                      , TypeCheck
