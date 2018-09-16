@@ -76,6 +76,14 @@ tcArgList ty [] = do
   return ty
 tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
 
+typeCheckTopLevel :: TopLevel -> TC Context
+typeCheckTopLevel (TLData d) = typeCheckData d
+typeCheckTopLevel (TLDef d) = typeCheckDefinition d
+
+typeCheckDefinition :: Definition -> TC Context
+typeCheckDefinition (Definition name ty body) = do
+  hasType body ty
+  insertEnv name body <$> insertCtx name ty <$> ask
 
 -- | Type-check a data declaration. If successful, it adds the type
 -- and constructors to the context.

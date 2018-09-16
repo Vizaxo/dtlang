@@ -8,6 +8,8 @@ import TypeCheck
 import Types
 
 import Control.Monad
+import Control.Monad.Except
+import Control.Monad.State
 import Data.Bifunctor
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -20,22 +22,34 @@ data ReplError
   | Unsupported
   deriving Show
 
-command :: Text -> Either ReplError (Term, Type)
+mapError :: Monad m => (e -> e') -> Either e a -> ExceptT e' m a
+mapError mkErr = withExceptT mkErr . ExceptT . return
+
+command :: Text -> ExceptT ReplError (State Context) String
 command s = do
-  (first ErrLexParse $ replParser s) >>= \case
-    Left _ -> Left Unsupported
+  mapError ErrLexParse (replParser s) >>= \case
+    Left t -> do
+      ctx <- get
+      mapError ErrType (runTC ctx (typeCheckTopLevel t)) >>= put
+      return (show t)
     Right t -> do
-      ctx <- first ErrCtx defaultCtx
-      ty <- first ErrType $ runTC ctx (typeCheck t)
-      term <- first ErrRun $ interpret ctx t
-      return (term, ty)
+      ctx <- get
+      ty <- mapError ErrType (runTC ctx (typeCheck t))
+      term <- mapError ErrRun (interpret ctx t)
+      return (showTerm term ty)
+  where showTerm term ty = show term <> " : " <> show ty
 
-showCommand :: Either ReplError (Term, Term) -> String
+showCommand :: Either ReplError String -> String
 showCommand (Left err) = "Error: " <> show err
-showCommand (Right (term, ty)) = show term <> " : " <> show ty
+showCommand (Right s) = s
 
-repl :: IO ()
-repl = interact (unlines . map (showCommand . command . pack) . lines)
+repl :: String -> String
+repl s = showCommand $ do
+  ctx <- first ErrCtx defaultCtx
+  return (unlines . map showCommand . flip evalState ctx . mapM run . lines $ s)
+  where
+    run :: String -> State Context (Either ReplError String)
+    run = runExceptT . command . pack
 
 main :: IO ()
-main = repl
+main = interact repl
