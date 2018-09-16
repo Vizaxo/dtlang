@@ -1,7 +1,13 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Types where
 
 import Utils
+
+import Data.Eq.Deriving
+import Data.Functor.Foldable
 import Data.Natural
+import Text.Show.Deriving
 
 -- | A program is a list of top-level definitions and data declarations
 type Program = [TopLevel]
@@ -9,7 +15,6 @@ type Program = [TopLevel]
 data TopLevel
   = TLData DataDecl
   | TLDef Definition
-  deriving (Eq, Show)
 
 -- | A data declaration has a name, a type, and a list of constructors.
 --   Each constructor has an associated type.
@@ -18,7 +23,6 @@ data DataDecl = DataDecl
   , ty :: Type                            -- ^Type of the datatype
   , constructors :: [(Constructor, Type)] -- ^Constructor declarations
   }
-  deriving (Eq, Show)
 
 -- | A constructor is a name.
 type Constructor = Name
@@ -29,33 +33,47 @@ data Definition = Definition
   , defType :: Term
   , defBody :: Term
   }
-  deriving (Eq, Show)
 
 -- | A binding of a variable to a type.
-type Binding = (Name, Term)
+type BindingF r = (Name, r)
 
 
 -- | The term datatype for the language, parameterised by the type of
 --   its variables.
-data Term = Var Name                         -- ^Variable
-          | Ctor Constructor [Term]          -- ^Fully applied constructor
-          | Lam Binding Term                 -- ^Lambda var body
-          | Pi Binding Term                  -- ^Pi var return
-          | App Term Term                    -- ^Application
-          | Ty Natural                       -- ^Type universes
-          | Case Term [CaseTerm]             -- ^Case expr of terms
-          deriving (Eq, Show)
+data TermF r
+  = VarF Name                       -- ^Variable
+  | CtorF Constructor [r]           -- ^Fully applied constructor
+  | LamF (BindingF r) r                  -- ^Lambda var body
+  | PiF (BindingF r) r                   -- ^Pi var return
+  | AppF r r                        -- ^Application
+  | TyF Natural                     -- ^Type universes
+  | CaseF r [CaseTermF r]              -- ^Case expr of terms
+  deriving (Eq, Show, Functor)
+
+type Term = Fix TermF
+
+pattern Var n = Fix (VarF n)
+pattern Ctor c es = Fix (CtorF c es)
+pattern Lam bind e = Fix (LamF bind e)
+pattern Pi bind e = Fix (PiF bind e)
+pattern App a b = Fix (AppF a b)
+pattern Ty n = Fix (TyF n)
+pattern Case e ts = Fix (CaseF e ts)
+
+type Binding = BindingF Term
 
 ty --> res = Pi ty res
 infixr 5 -->
 infixl 5 `App`
 
-data CaseTerm = CaseTerm
+data CaseTermF r = CaseTerm
   { ctConstructor :: Constructor
-  , ctBindings :: [Binding]
-  , ctExpression :: Term
+  , ctBindings :: [BindingF r]
+  , ctExpression :: r
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor)
+
+type CaseTerm = CaseTermF Term
 
 -- | @Type@ is just a synonym for @Term@, allowing slightly more
 -- informative documentation where needed.
@@ -67,7 +85,6 @@ data Context = Context
   , getEnv :: [(Name, Term)]
   , datatypes :: [DataDecl]
   }
-  deriving (Eq, Show)
 
 newtype GenVar = GenVar Int
   deriving (Eq, Ord, Show, Enum)
@@ -82,3 +99,22 @@ instance Enum Name where
   fromEnum (Generated a) = fromEnum a
   -- Probably not a great enum instance due to this case, but very useful
   fromEnum (Specified str) = -1
+
+
+$(deriveEq1 ''TermF)
+$(deriveEq1 ''CaseTermF)
+
+$(deriveShow1 ''TermF)
+$(deriveShow1 ''CaseTermF)
+
+deriving instance Eq TopLevel
+deriving instance Show TopLevel
+
+deriving instance Eq Definition
+deriving instance Show Definition
+
+deriving instance Eq Context
+deriving instance Show Context
+
+deriving instance Eq DataDecl
+deriving instance Show DataDecl
