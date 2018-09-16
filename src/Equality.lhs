@@ -197,10 +197,14 @@ fully applied 'Ctor'.
 
 If the variable is not a constructor, it cannot be reduced.
 
-> whnf (Var x) = do
->   catchError
->     (partiallyApplyCtor x)
->     (\_ -> return (Var x))
+> whnf (Var v) = do
+>   ctx <- ask
+>   case lookupEnv v ctx of
+>     Just t -> whnf t
+>     Nothing ->
+>       catchError
+>         (partiallyApplyCtor v)
+>         (\_ -> return (Var v))
 
 Any other term is already in whnf.
 

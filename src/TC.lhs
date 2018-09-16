@@ -105,6 +105,9 @@ We start with an empty context.
 > insertEnv :: Name -> Term -> Context -> Context
 > insertEnv n t (Context ctx env ds) = Context ctx ((n,t):env) ds
 
+> lookupEnv :: Name -> Context -> Maybe Term
+> lookupEnv n (Context _ env _) = lookup n env
+
 > insertDataDecl :: DataDecl -> Context -> Context
 > insertDataDecl d (Context ctx env ds) = Context ctx env (d:ds)
 
