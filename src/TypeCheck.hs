@@ -48,13 +48,14 @@ typeCheck (Case e xs) = do
   dataname <- appData t
   datatype@(DataDecl name ty ctors) <- lookupData dataname
   --TODO: use sets instead of lists
-  let datactors = sortBy (comparing fst) ctors
-  let casectors = sortBy (comparing ctConstructor) $ xs
+  let datactors = sortOn fst ctors
+  let casectors = sortOn ctConstructor xs
   caseTys <- zipWithM (tcCase datatype) datactors casectors
-  --TODO: check if empty cases work
   adjacentsSatisfyM betaEq caseTys
-  --TODO: check if contexts are properly propogated
-  whnf $ head caseTys
+  case caseTys of
+    -- We need type inference to know what type to make an empty case
+    [] -> throwError $ TypeError [PS "Empty cases are not yet supported"]
+    (x:_) -> whnf x
 
   where
     tcCase datatype (ctora, ty) (CaseTerm ctorb bindings expr)
