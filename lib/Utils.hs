@@ -1,9 +1,8 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module Utils where
 
-import Control.Monad.State
 import Control.Monad.Except
+import Control.Monad.State
+import Data.Functor.Foldable
 import Data.List
 import Debug.Trace
 

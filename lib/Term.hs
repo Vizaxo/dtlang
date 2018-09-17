@@ -4,41 +4,58 @@ import Types
 import Utils
 
 import Data.Bifunctor
+import Data.Functor.Foldable
 import Data.List
 
 -- | Get the maximum nesting level of a term.
 maxNesting :: Term -> Int
-maxNesting (Var v) = 0
-maxNesting (Lam _ t) = maxNesting t + 1
-maxNesting (Pi _ t) = maxNesting t + 1
-maxNesting (App a b) = max (maxNesting a) (maxNesting b)
-maxNesting (Ty _) = 0
-maxNesting (Case t branches) = max (maxNesting t) caseNesting
-  where caseNesting = maximumOr 0 $ fmap (maxNesting . \(CaseTerm _ _ x)->x) branches
+maxNesting = cata alg
+  where
+    alg :: TermF Int -> Int
+    alg (VarF v) = 0
+    alg (LamF (_,b) t) = max b (t + 1)
+    alg (PiF (_,b) t) = max b (t + 1)
+    alg (AppF a b) = max a b
+    alg (TyF _) = 0
+    alg (CaseF t branches) = max t (caseNesting branches)
+
+    caseNesting :: [CaseTermF Int] -> Int
+    caseNesting = maximumOr 0 . fmap (\(CaseTerm _ bs e) -> max (bindNesting bs) e)
+
+    bindNesting :: [BindingF Int] -> Int
+    bindNesting = maximumOr 0 . fmap snd
 
 -- | Substitute all free occurances of the given variable for the
---   second argument, in the third argument.
+-- second argument, in the third argument.
 subst :: Name -> Term -> Term -> Term
-subst v with (Var u) | v == u    = with
-                     | otherwise = Var u
-subst v with (Ctor c args) = Ctor c (subst v with <$> args)
-subst v with lam@(Lam (u,uTy) body)
-  | v == u    = lam --Variable is shadowed
-  | otherwise = Lam (u,(subst v with uTy)) (subst v with body)
-subst v with pi@(Pi (u,uTy) ret)
-  | v == u    = pi --Variable is shadowed
-  | otherwise = Pi (u,(subst v with uTy)) (subst v with ret)
-subst v with (App a b) = App (subst v with a) (subst v with b)
-subst v with (Ty n) = Ty n
-subst v with (Case e terms) = Case (subst v with e) (substCaseTerm v with <$> terms)
+subst v with = oldNewCata alg
+  where
+    alg :: Term -> OldNew Term
+    alg (Var u)
+      -- Substitute the matching variable
+      | v == u = Replace with
+    alg (Lam (u, _) _)
+      -- Variable is shadowed: don't substitute under the binder
+      | v == u = Old
+    alg (Pi (u, _) _)
+      -- Variable is shadowed: don't substitute under the binder
+      | v == u = Old
+    -- Else recursively substitute
+    alg _ = New
 
-substCaseTerm :: Name -> Term -> CaseTerm -> CaseTerm
-substCaseTerm v with (CaseTerm c bs body)
-  = CaseTerm c (substBinding v with <$> bs) (subst v with body)
+-- | Used in the @oldNewCata@ recursion scheme.
+data OldNew a = Old | New | Replace a
 
-substBinding :: Name -> Term -> (Name, Term) -> (Name, Term)
-substBinding v with (n, ty) | v == n = (n, ty)
-                            | otherwise = (n, subst v with ty)
+-- | Like a cata, but the OldNew value determines whether to use the
+-- sub-term without the recursive call applied (@Old@), with the
+-- recursive call applied (@New@), or replaced with a completely
+-- separate term (@Replace x@).
+oldNewCata :: Functor f => (Fix f -> OldNew (Fix f)) -> Fix f -> Fix f
+oldNewCata alg f = let f' = Fix (oldNewCata alg <$> unfix f) in
+  case alg f' of
+    Old -> f
+    New -> f'
+    Replace x -> x
 
 -- | Pretty-print a term.
 prettyPrint :: Term -> String
