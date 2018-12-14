@@ -79,6 +79,7 @@ num = toNum . fmap pack $ many digit
 tok :: Parser Token
 tok = many comment *> (reserved <|> identifier <|> num)
 
+lexer :: Parser [Token]
 lexer = spaces *> sepBy tok spaces <* eof
 
 expect :: Token -> TokParser ()

@@ -28,12 +28,12 @@ maxNesting = cata alg
 -- | Substitute all free occurances of the given variable for the
 -- second argument, in the third argument.
 subst :: Name -> Term -> Term -> Term
-subst v with = oldNewCata alg
+subst v replacement = oldNewCata alg
   where
     alg :: Term -> OldNew Term
     alg (Var u)
       -- Substitute the matching variable
-      | v == u = Replace with
+      | v == u = Replace replacement
     alg (Lam (u, _) _)
       -- Variable is shadowed: don't substitute under the binder
       | v == u = Old

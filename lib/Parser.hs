@@ -3,7 +3,8 @@ module Parser where
 
 import Lexer as L
 import Sexp
-import Types as T
+import Types hiding (Node)
+import qualified Types as T
 
 import Prelude hiding (pi)
 import Control.Applicative

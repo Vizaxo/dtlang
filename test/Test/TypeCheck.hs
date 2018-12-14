@@ -33,7 +33,7 @@ prop_idPreservesType :: Context -> WellTyped -> Bool
 prop_idPreservesType ctx (WellTyped term) = succeeded ctx $ do
   termT <- typeCheck term
   resT <- typeCheck (id' `App` termT `App` term)
-  return $ termT `betaEq` resT
+  termT `betaEq` resT
 
 -- | Applying a term twice to a pair then extracting the first element should
 --   have no effect on the type.

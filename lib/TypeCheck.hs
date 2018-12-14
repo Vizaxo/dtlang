@@ -52,12 +52,14 @@ typeCheck (Case e xs) = do
   let casectors = sortOn ctConstructor xs
   caseTys <- zipWithM (tcCase datatype) datactors casectors
   adjacentsSatisfyM betaEq caseTys
+  --TODO: work out what to do with dependently-tyepd case expressions
   case caseTys of
     -- We need type inference to know what type to make an empty case
     [] -> throwError $ TypeError [PS "Empty cases are not yet supported"]
     (x:_) -> whnf x
 
   where
+    --TODO: match based on type (e.g. don't match VNil for Vect Zero a)
     tcCase datatype (ctora, ty) (CaseTerm ctorb bindings expr)
       | ctora /= ctorb = throwError $ TypeError [PS "Constructors for datatype", PD datatype, PS "not matched by case expression", PT (Case e xs)]
       | otherwise = do

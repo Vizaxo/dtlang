@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFoldable #-}
 
 module Types where
 
@@ -37,17 +38,19 @@ data Definition = Definition
 -- | A binding of a variable to a type.
 type BindingF r = (Name, r)
 
+data BTree a = Node (BTree a) (BTree a) | Leaf a
+  deriving (Eq, Show, Functor, Foldable)
 
 -- | The term datatype for the language, parameterised by the type of
 --   its variables.
 data TermF r
   = VarF Name                       -- ^Variable
   | CtorF Constructor [r]           -- ^Fully applied constructor
-  | LamF (BindingF r) r                  -- ^Lambda var body
-  | PiF (BindingF r) r                   -- ^Pi var return
+  | LamF (BindingF r) r             -- ^Lambda var body
+  | PiF (BindingF r) r              -- ^Pi var return
   | AppF r r                        -- ^Application
   | TyF Natural                     -- ^Type universes
-  | CaseF r [CaseTermF r]              -- ^Case expr of terms
+  | CaseF r [CaseTermF r]           -- ^Case expr of terms
   deriving (Eq, Show, Functor)
 
 type Term = Fix TermF

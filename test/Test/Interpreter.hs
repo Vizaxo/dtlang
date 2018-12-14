@@ -21,8 +21,8 @@ prop_wellTypedWhnfSucceeds (WellTyped term) = succeeded emptyCtx $ whnf term --T
 --   effect on the value.
 prop_idReturnsArg :: WellTyped -> Bool
 prop_idReturnsArg (WellTyped term) = isRight $ defaultCtx >>= flip runTC (do
-    ty <- typeCheck term
-    betaEq term (id' `App` ty `App` term))
+  ty <- typeCheck term
+  term `betaEq` (id' `App` ty `App` term))
 
 -- | Applying a term twice to a pair then extracting the first element should
 --   have no effect on the value.
