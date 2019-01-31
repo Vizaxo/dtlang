@@ -75,6 +75,7 @@ library
                      , Types
                      , Utils
                      , Compiler
+                     , ASM
 
 test-suite Test
   type:                exitcode-stdio-1.0
