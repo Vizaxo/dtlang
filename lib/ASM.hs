@@ -14,6 +14,7 @@ import Data.Word
 import GHC.TypeLits
 import System.Exit
 import System.Process
+import Data.HList hiding (Label)
 
 import Term
 
@@ -28,13 +29,24 @@ data Displacement = D0 | D8 | D16 | D32
 data Scale = S1 | S2 | S4 | S8
   deriving Show
 
+data Label = L Text
+  deriving Show
+
 -- | Memory addresses, indexed by target size.
 data M (a :: RegSize) where
   -- TODO: ESP not allowed as index register
   -- TODO: how do sizes of targets affect sizes of base/index registers?
   Addr :: forall (d :: Displacement) size a. Show (DispWord d)
     => (R size) -> Maybe (R size, Scale) -> DispWord d -> M size
+
+  Label :: Label -> M size
 deriving instance Show (M size)
+
+data Addr (a :: RegSize) where
+  AbsGP :: R a -> Addr a
+  AbsPtr :: Label -> Addr R32
+  Rel :: forall (d :: Displacement) (a :: RegSize). Show (DispWord d) => DispWord d -> Addr a
+deriving instance Show (RegWord a) => Show (Addr a)
 
 -- | Registers, indexed by size.
 data R (a :: RegSize) where
@@ -80,6 +92,9 @@ data RMI (mem :: Nat) (imm :: Bool) (size :: RegSize) :: Type where
   Imm :: I size -> RMI n 'True size
 deriving instance Show (RegWord size) => Show (RMI n b size)
 
+data JumpCond = ECXZ | E | Z
+  deriving Show
+
 --  NOTE: info from Intel Architectures Software Developer's Manual
 -- | Assembly instructions.
 data Inst where
@@ -92,12 +107,30 @@ data Inst where
   -- MOV dest src will move src into dest.
   -- The src can be an immediate value.
   MOV :: Show (RegWord size) => (RMI 0 'False size) -> (RMI 0 'True size) -> Inst
+
+  J :: Show (RegWord a) => JumpCond -> Addr a -> Inst
+
+  LAB :: Label -> Inst -> Inst
+
+  NOP :: Inst
 deriving instance Show Inst
 
 -- | Multiple assembly instructions.
-data Instructions = Instructions [Inst]
-  deriving Show
+data Instructions where
+  Instructions :: forall (ctx :: [Maybe Label]). HList (Map Inst LabelCtx) -> Instructions
+deriving instance Show Instructions
 
+type family Map (f :: a -> b) (x :: [a]) :: [b]  where
+  Map f (LabelCtx '[]) = '[]
+
+{-
+type family Insts (ctx :: LabelCtx) where
+  Insts '[] = HNil
+  Insts ('Nothing ': ctx) = (Inst Nothing
+-}
+
+data LabelCtx = LabelCtx [Maybe Label]
+  deriving Show
 
 -- | The @ASM@ class is for types which can be printed to form valid
 -- assembly code.
@@ -119,10 +152,24 @@ instance Show (RegWord size) => ASM (RMI n b size) where
 instance Show (RegWord size) => ASM (I size) where
   toAsm (I word) = T.pack $ show word
 
+instance ASM Label where
+  toAsm (L t) = t
+
+instance ASM JumpCond where
+  toAsm = T.toLower . T.pack . show
+
+instance ASM (Addr size) where
+  toAsm (AbsGP r) = toAsm r
+  toAsm (AbsPtr l) = toAsm l
+  --toAsm (Rel disp) = toAsm disp
+
 -- TODO: write generics for this?
 instance ASM Inst where
-  toAsm (ADD dest src) = "add " <> toAsm dest <> ", " <> toAsm src
-  toAsm (MOV dest src) = "mov " <> toAsm dest <> ", " <> toAsm src
+  toAsm (ADD dest src) = "\tadd " <> toAsm dest <> ", " <> toAsm src
+  toAsm (MOV dest src) = "\tmov " <> toAsm dest <> ", " <> toAsm src
+  toAsm NOP = "\tnop"
+  toAsm (LAB l i) = toAsm l <> ":" <> toAsm i
+  toAsm (J c l) = "\tj" <> toAsm c <> " " <> toAsm l
 
 instance ASM Instructions where
   toAsm (Instructions is) = T.concat $ (<> ["\n"]) $ intersperse "\n" $ (map toAsm is)
@@ -131,10 +178,12 @@ instance ASM Instructions where
 testInst :: Instructions
 testInst = Instructions
   [ MOV (Reg EAX) (Imm (I 12))
-  , ADD (Reg EAX) (Reg EAX)
+  , LAB (L "fooo") $ ADD (Reg EAX) (Reg EAX)
   , MOV (Reg EBX) (Reg EAX)
+  , NOP
   , ADD (Reg EBX) (Mem (Addr ECX Nothing ())) -- No address offset
   , ADD (Reg EDX) (Mem (Addr ECX (Just (EDX, S4)) (6 :: Word8))) -- 8-bit address offset of 6
+  , J Z (AbsPtr (L "fooo"))
   ]
 
 -- | Assemble instructions using nasm.
@@ -144,3 +193,13 @@ assemble is = do
   liftIO (system "nasm tmp.asm -o tmp.out") >>= \case
     ExitSuccess -> return ()
     ExitFailure _ -> mzero
+
+{-
+TODO:
+- Rename RMI to operand
+- Generics for ASM instances (instructions of any number and type of operands)
+- More instructions
+- Labels (maybe with a context) and addresses
+- Non-instruction features (such as reserved memory, globals, etc.)
+- Calling functions
+-}

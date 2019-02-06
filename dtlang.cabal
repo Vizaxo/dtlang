@@ -63,6 +63,7 @@ library
                      , process
                      , transformers
                      , containers
+                     , HList
   exposed-modules:     Equality
                      , Examples
                      , Interpret
