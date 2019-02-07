@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-12.0
+resolver: lts-12.24
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -39,21 +39,23 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- QuickCheck-2.11.3
-- QuickCheck-GenT-0.2.0
-- deriving-compat-0.5.2
-- lens-4.17
-- logict-state-0.1.0.4
-- mtl-2.2.2
-- natural-numbers-0.1.2.0
-- parsec-3.1.13.0
-- random-1.1
-- recursion-schemes-5.0.3
-- tasty-1.1.0.3
-- tasty-hunit-0.10.0.1
-- tasty-quickcheck-0.10
-- text-1.2.3.0
-- transformers-0.5.5.0
+#- QuickCheck-2.11.3
+- natural-numbers-0.1.2.0@sha256:0fcbe1220979b83fa612fca73a1adb1a99ff43c84f9652b3ff32b2323309b43c
+- QuickCheck-GenT-0.2.0@sha256:d11b7b4a3f7648895eff66376a00f763821ee955ce42a37fb918213a8eae88d6
+##- QuickCheck-GenT-0.2.0
+#- deriving-compat-0.5.2
+#- mtl-2.2.2
+#- natural-numbers-0.1.2.0
+#- parsec-3.1.13.0
+#- random-1.1
+#- recursion-schemes-5.0.3
+#- tasty-1.1.0.3
+#- tasty-hunit-0.10.0.1
+#- tasty-quickcheck-0.10
+#- text-1.2.3.0
+#- transformers-0.5.5.0
+#- HList-0.5.0.0
+#- intero-0.1.35
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

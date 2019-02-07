@@ -40,6 +40,16 @@ library
                      , StandaloneDeriving
                      , TupleSections
                      , TypeApplications
+                     , KindSignatures
+                     , GADTs
+                     , TypeFamilies
+                     , PolyKinds
+                     , ConstraintKinds
+                     , TypeFamilyDependencies
+                     , TypeOperators
+                     , DeriveFoldable
+                     , DeriveTraversable
+                     , ViewPatterns
   build-depends:       base >= 4.7 && < 5
                      , QuickCheck
                      , deriving-compat
@@ -50,6 +60,9 @@ library
                      , parsec
                      , recursion-schemes
                      , text
+                     , process
+                     , transformers
+                     , containers
   exposed-modules:     Equality
                      , Examples
                      , Interpret
@@ -61,6 +74,7 @@ library
                      , TypeCheck
                      , Types
                      , Utils
+                     , Compiler
 
 test-suite Test
   type:                exitcode-stdio-1.0
@@ -77,6 +91,9 @@ test-suite Test
                      , Rank2Types
                      , GeneralizedNewtypeDeriving
                      , InstanceSigs
+                     , OverloadedStrings
+                     , TypeFamilies
+                     , GADTs
   other-modules:       Test.DataTypes
                      , Test.Generators
                      , Test.Interpreter
@@ -87,7 +104,6 @@ test-suite Test
                      , lens
                      , QuickCheck
                      , QuickCheck-GenT
-                     , logict-state
                      , dtlang
                      , tasty
                      , tasty-hunit

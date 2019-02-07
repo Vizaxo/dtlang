@@ -43,3 +43,14 @@ spy :: Show a => a -> a
 spy a = trace (show a) a
 
 hasDuplicates xs = length xs /= length (nub xs)
+
+cataM' :: (Functor f, Traversable f, Monad m) => (f a -> m a) -> Fix f -> m a
+cataM' alg f = alg =<< sequence (cataM alg <$> unfix f)
+
+-- | A monadic catamorphism, where the algebra can have monadic
+-- effects which will be propogated to the top-level.
+cataM :: (Recursive t, Traversable (Base t), Monad m) => (Base t a -> m a) -> t -> m a
+cataM alg f = alg =<< sequence (cataM alg <$> project f)
+
+maybeMPlus :: MonadPlus m => Maybe a -> m a
+maybeMPlus = maybe mzero pure
