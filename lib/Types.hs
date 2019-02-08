@@ -1,9 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFoldable #-}
 
 module Types where
-
-import Utils
 
 import Data.Eq.Deriving
 import Data.Functor.Foldable
@@ -93,13 +90,13 @@ newtype GenVar = GenVar Int
   deriving (Eq, Ord, Show, Enum)
 
 data Name = Specified String
-          | Generated GenVar
+          | Generated String GenVar
           deriving (Eq, Ord, Show)
 
 instance Enum Name where
-  toEnum = Generated . toEnum
+  toEnum = Generated "" . toEnum
 
-  fromEnum (Generated a) = fromEnum a
+  fromEnum (Generated c a) = fromEnum a
   -- Probably not a great enum instance due to this case, but very useful
   fromEnum (Specified str) = -1
 

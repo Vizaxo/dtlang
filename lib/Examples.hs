@@ -85,9 +85,11 @@ natId = Lam (var "x", natT) (v "x")
 var = Specified
 v = Var . var
 
+c n = Ctor (var n)
+
 natT = v "Nat"
-zero = v "Zero"
-succ' = v "Succ"
+zero = c "Zero" []
+succ' n = c "Succ" [n]
 
 list :: DataDecl
 list = DataDecl
@@ -140,8 +142,15 @@ three = succT `App` succT `App` succT `App` zeroT
 patternMatchNat
   = Lam (var "n", natT) $
      Case (v "n")
-      [CaseTerm (var "Zero") [] (succ' `App` zero)
-      ,CaseTerm (var "Succ") [(var "n", natT)] zero]
+      [CaseTerm (var "Zero") [] (Ctor (var "Succ") [Ctor (var "Zero") []])
+      ,CaseTerm (var "Succ") [(var "n", natT)] (Ctor (var "Zero") [])]
+
+patternMatchNat'
+  = Case (Ctor (var "Succ") [Ctor (var "Succ") [Ctor (var "Zero") []]])
+      [CaseTerm (var "Zero") [] (Ctor (var "Succ") [Ctor (var "Zero") []])
+      ,CaseTerm (var "Succ") [(var "n", natT)] (v "n")]
+
+testCase = (Ctor (var "Succ") [Ctor (var "Zero") []])
 
 void :: DataDecl
 void = DataDecl
@@ -169,3 +178,11 @@ plus = Definition (Specified "plus") (Pi (var "n", natT) $ Pi (var "m", natT) $ 
    Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
                 , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
                 ])
+
+plusTerm = (Lam (var "n", natT) $ Lam (var "m", natT) $
+   Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
+                , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
+                ])
+
+k = Lam (var "a", natT) (Lam (var "b", natT) (v "a"))
+closureTest = k `App` (succ' zero) `App` zero

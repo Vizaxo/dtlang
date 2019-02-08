@@ -62,8 +62,8 @@ used.
 >   let existingGens = catMaybes $ (fromEnum <$>) . getGen <$> (fst <$> (getCtx ctx)) ++ avoid
 >   let nextVar = toEnum $ max (fromEnum v) (1 + maximumOr (-1) (existingGens))
 >   put $ succ nextVar
->   return $ Generated nextVar
->   where getGen (Generated v) = Just v
+>   return $ Generated "fresh" nextVar
+>   where getGen (Generated "fresh" v) = Just v
 >         getGen _ = Nothing
 
 Fresh should produce a variable that is not already present in the
