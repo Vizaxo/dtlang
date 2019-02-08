@@ -54,3 +54,9 @@ cataM alg f = alg =<< sequence (cataM alg <$> project f)
 
 maybeMPlus :: MonadPlus m => Maybe a -> m a
 maybeMPlus = maybe mzero pure
+
+withError :: (MonadError e' m) => (e -> e') -> ExceptT e m a -> m a
+withError f ma = do
+  runExceptT ma >>= \case
+    Left e -> throwError (f e)
+    Right x -> pure x

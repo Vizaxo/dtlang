@@ -1,8 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Compiler where
 
-import Control.Arrow
-import Control.Monad
+import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -13,17 +12,14 @@ import Data.List
 import Data.Tuple
 import Data.Map (Map)
 import Data.Maybe
-import Data.Natural hiding (fold)
 import qualified Data.Map as M
 
 import Types
 import Utils
 
-type ErasedBindingF r = Name
-
 data ErasedCaseTermF r = ECaseTermF
   { _ectConstructor :: Constructor
-  , _ectBindings :: [ErasedBindingF r]
+  , _ectBindings :: [Name]
   , _ectExpression :: r
   }
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -33,25 +29,12 @@ makeLenses ''ErasedCaseTermF
 data ErasedTerm
   = EVar Name
   | ECtor Constructor [ErasedTerm]
-  | ELam (ErasedBindingF ErasedTerm) ErasedTerm
+  | ELam Name ErasedTerm
   | EApp ErasedTerm ErasedTerm
   | ECase ErasedTerm [ErasedCaseTermF ErasedTerm]
   | EErasedType
   deriving Show
 makeBaseFunctor ''ErasedTerm
-
-freeVarsE :: ErasedTerm -> [Name]
-freeVarsE = cata alg where
-  alg :: ErasedTermF [Name] -> [Name]
-  alg (EVarF v) = [v]
-  alg (ECtorF c args) = concat args
-  alg (ELamF v body) = body \\ [v]
-  alg (EAppF a b) = a ++ b
-  alg (ECaseF e terms) = e ++ (concatMap freeVarsCaseTermE terms)
-  alg EErasedTypeF = []
-
-  freeVarsCaseTermE :: ErasedCaseTermF [Name] -> [Name]
-  freeVarsCaseTermE (ECaseTermF _ bindings expr) = expr \\ bindings
 
 -- | Erase types ready for compilation
 -- TODO: also erase lambdas where the argument is a type
@@ -77,9 +60,10 @@ data FunctionName = FunctionName Name
 
 data LamLiftedTerm
   = LLVar Name
+  | LLEnvRef Int
   | LLCtor Constructor [LamLiftedTerm]
-  | LLCurrFunc FunctionName [Name]
-  | LLApp LamLiftedTerm [LamLiftedTerm]
+  | LLMkClosure FunctionName [Name]
+  | LLApp LamLiftedTerm LamLiftedTerm
   | LLCase LamLiftedTerm [ErasedCaseTermF LamLiftedTerm]
   | LLErasedType
   deriving Show
@@ -89,22 +73,20 @@ freeVarsLL :: LamLiftedTerm -> [Name]
 freeVarsLL = cata alg where
   alg :: LamLiftedTermF [Name] -> [Name]
   alg (LLVarF v) = [v]
+  alg (LLEnvRefF i) = []
   alg (LLCtorF c args) = concat args
-  alg (LLCurrFuncF f frees) = frees
-  alg (LLAppF f xs) = f ++ concat xs
+  alg (LLMkClosureF f frees) = frees
+  alg (LLAppF f xs) = f ++ xs
   alg (LLCaseF e terms) = e ++ (concatMap freeVarsCaseTermE terms)
   alg LLErasedTypeF = []
 
   freeVarsCaseTermE :: ErasedCaseTermF [Name] -> [Name]
   freeVarsCaseTermE (ECaseTermF _ bindings expr) = expr \\ bindings
 
-data DeBruijnLocal t = DBLocal Natural | DBTerm t
-  deriving (Functor, Foldable, Traversable)
-makeBaseFunctor ''DeBruijnLocal
-
 data Function t = Function
   { name :: FunctionName
-  , params :: [Name]
+  , arg :: Name
+  , env :: [Name]
   , body :: t
   }
   deriving (Show, Functor, Foldable, Traversable)
@@ -118,47 +100,56 @@ makeLenses ''TermAndFunctions
 
 type LamLifted = TermAndFunctions LamLiftedTerm
 
-freshName :: MonadState GenVar m => m Name
-freshName = do
+freshName :: MonadState GenVar m => String -> m Name
+freshName custom = do
   name <- get
   modify (\(GenVar i) -> GenVar (i+1))
-  pure $ Generated name
+  pure $ Generated custom name
 
-freshFnName :: MonadState GenVar m => m FunctionName
-freshFnName = FunctionName <$> freshName
+freshFnName :: MonadState GenVar m => String -> m FunctionName
+freshFnName f = FunctionName <$> freshName f
 
-evalGenVarState :: Monad m => StateT GenVar m a -> m a
-evalGenVarState = flip evalStateT (GenVar 0)
-
-lambdaLift :: ErasedTerm -> LamLifted
-lambdaLift = uncurry TermAndFunctions . runWriter . evalGenVarState . cataM alg
+lambdaLift :: MonadState GenVar m => ErasedTerm -> m LamLifted
+lambdaLift = fmap (uncurry TermAndFunctions) . runWriterT . cataM alg
   where
-    alg :: (MonadWriter [Function LamLiftedTerm] m, MonadState GenVar m) => Base ErasedTerm LamLiftedTerm -> m LamLiftedTerm
+    alg :: (MonadWriter [Function LamLiftedTerm] m, MonadState GenVar m)
+      => Base ErasedTerm LamLiftedTerm -> m LamLiftedTerm
     alg (EVarF n) = pure (LLVar n)
     alg (ECtorF ctor args) = pure (LLCtor ctor args)
     alg (ELamF arg body) = do
-      name <- freshFnName
+      name <- freshFnName "lambda"
       let frees = freeVarsLL body \\ [arg]
-      tell [Function name (arg:frees) body]
-      return (LLCurrFunc name frees)
-    alg (EAppF f x) = pure (LLApp f (x:(LLVar <$> freeVarsLL f)))
+      tell [Function name arg frees (mkEnvRefs frees body)]
+      return (LLMkClosure name frees)
+    alg (EAppF f x) = pure (LLApp f x)
     alg (ECaseF e terms) = pure (LLCase e terms)
     alg EErasedTypeF = pure LLErasedType
+
+    mkEnvRefs :: [Name] -> LamLiftedTerm -> LamLiftedTerm
+    mkEnvRefs env = cata alg' where
+      alg' (LLVarF n) = case elemIndex n env of
+        Nothing -> LLVar n
+        Just i -> LLEnvRef i
+      alg' t = embed t
 
 data Tag = Tag Int
   deriving (Eq, Ord, Show)
 
 data ExplicitDataData
-  = EDClosure FunctionName [ExplicitDataData]
-  | EDTaggedUnion Tag [Name]
-  | EDUnit
+  = EDClosure' FunctionName [ExplicitDataData]
+  | EDTaggedUnion Tag [Name] --TODO: distinguish between data and expr returning data
+  deriving Show
+
+data EDClosure = EDClosure FunctionName [Name]
   deriving Show
 
 data ExplicitDataTerm
   = EDVar Name
-  | EDFunc FunctionName
-  | EDData ExplicitDataData
-  | EDFuncall FunctionName [Name]
+  | EDEnvRef Int
+  | EDUnit
+  | EDTaggedUnionExpr Tag [Name]
+  | EDMkClosure FunctionName [Name]
+  | EDApp ExplicitDataTerm ExplicitDataTerm
   | EDCase ExplicitDataTerm (Map Tag ([Name], ExplicitDataTerm))
   | EDLet [(Name, ExplicitDataTerm)] ExplicitDataTerm
   deriving Show
@@ -166,194 +157,221 @@ makeBaseFunctor ''ExplicitDataTerm
 
 type ExplicitData = TermAndFunctions ExplicitDataTerm
 
-toExplicitData :: forall m. (MonadReader [DataDecl] m, MonadPlus m, MonadState GenVar m) => LamLifted -> m ExplicitData
-toExplicitData = (addFns <$>) . mapM (cataM alg)
+data ExplicitDataError
+  = EDCtorNotFound Constructor
+  deriving Show
+
+toExplicitData :: forall m. (MonadReader [DataDecl] m, MonadError ExplicitDataError m, MonadState GenVar m) => LamLifted -> m ExplicitData
+toExplicitData = mapM (cataM alg)
   where
     alg :: Base LamLiftedTerm ExplicitDataTerm -> m ExplicitDataTerm
     alg (LLVarF n) = pure $ EDVar n
+    alg (LLEnvRefF i) = pure $ EDEnvRef i
     alg (LLCtorF c args) = do
-      bindings <- mapM (\a -> (,a) <$> freshName) args
+      bindings <- mapM (\a -> (,a) <$> freshName "ctor_bind") args
       tag <- getCtorTag c
-      pure (EDLet bindings (EDData $ EDTaggedUnion tag (fst <$> bindings)))
-    alg (LLCurrFuncF f _) = pure (EDFunc f)
-    alg (LLAppF f args) = do
-      bindings <- mapM (\a -> (,a) <$> freshName) args
-      name <- getName f
-      pure (EDLet bindings (EDFuncall name (fst <$> bindings)))
+      pure (EDLet bindings (EDTaggedUnionExpr tag (fst <$> bindings)))
+    alg (LLMkClosureF f env) = pure (EDMkClosure f env)
+    alg (LLAppF f arg) = pure (EDApp f arg)
     alg (LLCaseF e cases) = do
       cases' <- mapM convertCase cases
       pure (EDCase e (M.fromList cases'))
-    alg LLErasedTypeF = pure (EDData EDUnit)
+    alg LLErasedTypeF = pure EDUnit
 
     convertCase :: ErasedCaseTermF ExplicitDataTerm -> m (Tag, ([Name], ExplicitDataTerm))
     convertCase (ECaseTermF ctor bs e) = (, (bs, e)) <$> getCtorTag ctor
 
-    getName :: ExplicitDataTerm -> m FunctionName
-    getName (EDFunc f) = pure f
-    getName _ = mzero
-
-    identityFn :: Function ExplicitDataTerm
-    identityFn = Function (FunctionName $ Specified "identity") [Specified "a"] (EDVar (Specified "a"))
-
-    addFns :: ExplicitData -> ExplicitData
-    addFns = over funs (identityFn:)
-
-getCtorTag :: (MonadReader [DataDecl] m, MonadPlus m) => Constructor -> m Tag
+getCtorTag :: (MonadReader [DataDecl] m, MonadError ExplicitDataError m) => Constructor -> m Tag
 getCtorTag c = do
   datatypes <- ask
-  Tag <$> (maybe mzero pure $ listToMaybe $ catMaybes (ctorIndex <$> datatypes))
+  Tag <$> (maybe (throwError (EDCtorNotFound c))  pure $ listToMaybe $ catMaybes (ctorIndex <$> datatypes))
   where
     ctorIndex :: DataDecl -> Maybe Int
     ctorIndex (DataDecl _ _ ((fst <$>) -> ctors))
       = elemIndex c ctors
 
-compile :: (MonadReader [DataDecl] m, MonadPlus m, MonadState GenVar m) => Term -> m ExplicitData
-compile = toExplicitData . lambdaLift . eraseTypes
-
-runCompile :: [DataDecl] -> (ReaderT [DataDecl] (StateT GenVar Maybe)) a -> Maybe a
-runCompile env ma = evalStateT (runReaderT ma env) (GenVar 0)
-
-interpretED :: forall m. MonadPlus m => ExplicitData -> m ExplicitDataData
-interpretED (TermAndFunctions t fs) = interpret' (M.empty) t
-  where
-    interpret' :: Map Name ExplicitDataData -> ExplicitDataTerm -> m ExplicitDataData
-    interpret' env (EDFunc f) = pure (EDClosure f [])
-    interpret' env (EDVar n) = maybeMPlus $ M.lookup n env
-    interpret' env (EDData d) = pure d
-    interpret' env (EDFuncall f args) = do
-      (ps, b) <- maybeMPlus $ lookup f $ (\(Function n p b) -> (n, (p, b))) <$> fs
-      args' <- maybeMPlus $ mapM (flip M.lookup env) args
-      case compare (length ps) (length args) of
-        LT -> mzero
-        EQ -> interpret' (inserts ps args' env) b
-        GT -> pure (EDClosure f args')
-    interpret' env (EDCase e cases) = do
-      interpret' env e >>= \case
-        EDTaggedUnion t args -> do
-          (bs, caseTerm) <- maybeMPlus $ M.lookup t cases
-          args' <- maybeMPlus $ mapM (flip M.lookup env) args
-          interpret' (inserts bs args' env) caseTerm
-    interpret' env (EDLet bs t) = do
-      bs' <- traverseOf (each._2) (interpret' env) bs
-      interpret' (uncurry inserts (unzip bs') env) t
-
-    inserts ks vs = foldr (.) id (M.insert <$> ks <*> vs)
+data ASMType
+  = Void
+  | Closure
+  | TaggedUnion
+  | Ptr ASMType
+  deriving Show
+makeBaseFunctor ''ASMType
 
 data HighLevelAsmExpr
   = HLAEVar Name
-  | HLAEData ExplicitDataData
-  | HLAEFuncall FunctionName [Name]
-  | HLAEFunc FunctionName
+  | HLAEEnvRef Int
+  | HLAEUnit
+  | HLAETaggedUnionExpr Tag Name
+  | HLAEMkClosure FunctionName Name
+  | HLAEApp HighLevelAsmExpr HighLevelAsmExpr
+  | HLAEIndexInto HighLevelAsmExpr Int
+  | HLAEStructMember HighLevelAsmExpr String
+  | HLAEMalloc ASMType Int
+  deriving Show
+makeBaseFunctor ''HighLevelAsmExpr
 
 data HighLevelAsmStmt
   = HLASAssign Name HighLevelAsmExpr
-  | HLASDeclare Name
-  | HLASDeclareAssign Name HighLevelAsmExpr
-  | HLASIf HighLevelAsmExpr HighLevelAsmStmt HighLevelAsmStmt
+  | HLASAssignArr Name Int HighLevelAsmExpr
+  | HLASDeclare ASMType Name
+  | HLASDeclareArr ASMType Name Int
+  | HLASDeclareAssign ASMType Name HighLevelAsmExpr
+  | HLASIf HighLevelAsmExpr HighLevelAsmStmt HighLevelAsmStmt --TODO: probably don't need
   | HLASNop
-  | HLASBlock [HighLevelAsmStmt]
   | HLASExpr HighLevelAsmExpr
-  | HLASSwitch Name (Map Tag HighLevelAsmStmt)
+  | HLASSwitch HighLevelAsmExpr (Map Tag HighLevelAsmStmt)
+  | HLASBlock [HighLevelAsmStmt]
+  deriving Show
 makeBaseFunctor ''HighLevelAsmStmt
 
 instance Semigroup HighLevelAsmStmt where
    a <> HLASNop = a
    HLASNop <> b = b
-   (HLASBlock as) <> (HLASBlock bs) = HLASBlock (as ++ bs)
-   (HLASBlock as) <> b = HLASBlock (as ++ [b])
+   (HLASBlock as) <> (HLASBlock bs) = HLASBlock (as <> bs)
+   (HLASBlock as) <> b = HLASBlock (as <> [b])
    a <> (HLASBlock bs) = HLASBlock (a:bs)
    a <> b = HLASBlock [a,b]
 instance Monoid HighLevelAsmStmt where
   mempty = HLASNop
   mappend = (<>)
 
+deriving instance Show a => Show (ExplicitDataTermF a)
+
 type HighLevelAsm = TermAndFunctions (HighLevelAsmStmt, HighLevelAsmExpr)
 
-toHLA :: MonadPlus m => ExplicitData -> m HighLevelAsm
-toHLA = mapM (flip evalStateT (GenVar 0) . (swap <$>) . runWriterT . cataM alg)
+toHLA :: MonadState GenVar m => ExplicitData -> m HighLevelAsm
+toHLA = mapM (fmap swap . cataM alg)
   where
-    toExpr :: (MonadPlus m, MonadWriter HighLevelAsmStmt m, MonadState GenVar m) => Base ExplicitDataTerm HighLevelAsmExpr -> m HighLevelAsmExpr
-    toExpr (EDVarF n) = pure $ HLAEVar n
-    toExpr (EDFuncF f) = pure $ HLAEFunc f
-    toExpr (EDDataF d) = pure $ HLAEData d
-    toExpr (EDFuncallF f args) = pure $ HLAEFuncall f args
-    toExpr (EDCaseF term cases) = do
-      --TODO: variable bindings in case
-      v <- freshName
-      tag <- freshName
-      tell $ HLASDeclare v
-      tell $ HLASDeclareAssign tag term
-      tell $ HLASSwitch tag (HLASAssign v . snd <$> cases)
-      pure $ HLAEVar v
-    toExpr (EDLetF bs t) = do
-      mapM tell $ uncurry HLASDeclareAssign <$> bs
-      pure t
+    alg :: MonadState GenVar m => Base ExplicitDataTerm (HighLevelAsmExpr, HighLevelAsmStmt) -> m (HighLevelAsmExpr, HighLevelAsmStmt)
+    alg (EDVarF n) = pure $ (HLAEVar n, HLASNop)
+    alg (EDEnvRefF i) = pure $ (HLAEEnvRef i, HLASNop)
+    alg (EDTaggedUnionExprF t names) = do
+      arr <- freshName "tagged_union_arr"
+      let assigns = (\(n, i) -> HLASAssignArr arr i (HLAEVar n)) <$> zip names [0..]
+      let stmt = HLASDeclareArr (Ptr Void) arr (length names) <> mconcat assigns
+      pure $ (HLAETaggedUnionExpr t arr, stmt)
+    alg (EDMkClosureF f env) = do
+      ret <- freshName "closure_ret"
+      envVar <- freshName "closure_env"
+      let s = [HLASDeclareAssign (Ptr $ Ptr Void) envVar
+               (HLAEMalloc (Ptr Void) (length env))]
+            <> ((\(e, i) -> HLASAssignArr envVar i (HLAEVar e)) <$> zip env [0..])
+            <> [ HLASDeclareAssign (Ptr Closure) ret (HLAEMalloc Closure 1)
+               , HLASAssignArr ret 0 (HLAEMkClosure f envVar)]
+      pure (HLAEVar ret, HLASBlock s)
+    alg (EDAppF (f,s) (arg,s')) = pure (HLAEApp f arg, s <> s')
+    alg (EDCaseF (scrutinee, s) cases) = do
+      v <- freshName "case"
+      let mkCase (bindings, (expr,s')) = HLASBlock $
+            (s':) $
+            mkBindings bindings scrutinee <>
+            [ HLASAssign v expr
+            ]
+      let stmt = s
+            <> HLASDeclare (Ptr Void) v
+            <> HLASSwitch (HLAEStructMember scrutinee "tag") (mkCase <$> cases)
+      pure $ (HLAEVar v, stmt)
+    alg (EDLetF bs (t, s)) = do
+      let s' = fmap (\(name,(e,s)) -> s <> HLASDeclareAssign (Ptr Void) name e) bs :: [HighLevelAsmStmt]
+      pure (t, mconcat s' <> s)
+    alg (EDUnitF) = pure (HLAEUnit, HLASNop)
 
-    alg :: (MonadPlus m, MonadWriter HighLevelAsmStmt m, MonadState GenVar m) => Base ExplicitDataTerm HighLevelAsmExpr -> m HighLevelAsmExpr
-    alg = toExpr
+    mkBindings :: [Name] -> HighLevelAsmExpr -> [HighLevelAsmStmt]
+    mkBindings bindings expr = let bs' = zip bindings [(0 :: Int)..]
+      in (\(name, i) -> HLASDeclareAssign (Ptr Void) name (HLAEIndexInto (HLAEStructMember expr "data") i)) <$> bs'
 
-    unHLASExpr (HLASExpr e) = e
 
 toC :: HighLevelAsm -> String
 toC (TermAndFunctions t fs)
-  = headers <> mkTaggedUnionStruct <> decls
-  <> intercalate "\n" (mkMain : (mkCFunction <$> fs))
+  = headers <> "\n" <> mkTaggedUnionStruct <> "\n" <> mkClosureStruct <> "\n" <> mkClosureCallFn
+  <> "\n" <> decls
+  <> "\n" <> intercalate "\n\n" (mkMain : (mkCFunction <$> fs))
   where
     decls = concatMap declareCFunction fs
+
     mkMain = cFunction "main" [] (toCStmt (fst t) <> "printf(\"%d\\n\", ((taggedunion*)" <> toCExpr (snd t) <> ")->tag);\n")
 
-    headers = "#include <stdio.h>\n\n"
-
-declareCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
-declareCFunction (Function name params (body, ret))
-  = cFunDecl (toCFnName name) (toCName <$> params)
+    headers = "#include <stdio.h>\n"
+            <> "#include <stdlib.h>\n"
 
 mkCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
-mkCFunction (Function name params (body, ret))
-  = cFunction (toCFnName name) (toCName <$> params) (toCStmt body <> "return " <> toCExpr ret <> ";\n")
+mkCFunction (Function name arg _ (HLASNop, ret))
+  = cFunction (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")] ("return " <> toCExpr ret <> ";\n")
+mkCFunction (Function name arg _ (body, ret))
+  = cFunction (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")] (toCStmt body <> "return " <> toCExpr ret <> ";\n")
 
 toCStmt :: HighLevelAsmStmt -> String
 toCStmt = cata alg where
   alg (HLASAssignF n e) = toCName n <> " = " <> toCExpr e <> ";\n"
-  alg (HLASDeclareF n) = "void* " <> toCName n <> ";\n"
-  alg (HLASDeclareAssignF n e) = "void* " <> toCName n <> " = " <> toCExpr e <> ";\n"
+  alg (HLASAssignArrF n i e) = toCName n <> "[" <> show i <> "] = " <> toCExpr e <> ";\n"
+  alg (HLASDeclareF t n) = toCType t <> toCName n <> ";\n"
+  alg (HLASDeclareArrF t n i) = toCType t <> toCName n <> "[" <> show i <> "];\n"
+  alg (HLASDeclareAssignF t n e) = toCType t <> toCName n <> " = " <> toCExpr e <> ";\n"
   alg (HLASIfF cond t f) = "if (" <> toCExpr cond <> ") {\n" <> t <> "} else {\n" <> f <> "}\n"
   alg HLASNopF = ";\n"
   alg (HLASBlockF ss) = concat ss
   alg (HLASExprF e) = toCExpr e <> ";\n"
-  alg (HLASSwitchF n cases) = "switch (((taggedunion*)" <> toCName n <> ")->tag) {\n" <> concat (toCCase <$> M.toList cases) <> "}\n"
+  alg (HLASSwitchF n cases) = "switch (" <> toCExpr n <> ") {\n" <> concat (toCCase <$> M.toList cases) <> "}\n"
 
   toCCase :: (Tag, String) -> String
-  toCCase (Tag t, s) = "case " <> show t <> ":\n" <> s <> "break;\n"
+  toCCase (Tag t, s) = "case " <> show t <> ":\n{\n" <> s <> "break;\n}\n"
 
 toCExpr :: HighLevelAsmExpr -> String
 toCExpr (HLAEVar n) = toCName n
-toCExpr (HLAEData d) = toCData d
-toCExpr (HLAEFuncall f params) = toCFnName f <> "(" <> (intercalate ", " (toCName <$> params)) <> ")"
-toCExpr (HLAEFunc f) = toCFnName f
+toCExpr (HLAEEnvRef i) = "env[" <> show i <> "]"
+toCExpr HLAEUnit = "NULL" --TODO: not sure what this should be
+toCExpr (HLAETaggedUnionExpr (Tag tag) arr) = "&(taggedunion){.tag = " <> show tag <> ", .data = " <> toCName arr <> "}" --TODO: don't dereference, malloc
+toCExpr (HLAEMkClosure f env) = "(closure){.f = " <> toCFnName f <> ", .env = " <> toCName env <> "}"
+toCExpr (HLAEApp f x) = "__closure_call(" <> toCExpr f <> ", " <> toCExpr x <> ")"
+  --toCFnName f <> "(" <> (intercalate ", " (toCName <$> params)) <> ")"
+toCExpr (HLAEIndexInto e i) = "((taggedunion**)" <> toCExpr e <> ")[" <> show i <> "]"
+toCExpr (HLAEStructMember e member) = "((taggedunion*)" <> toCExpr e <> ")->" <> member
+toCExpr (HLAEMalloc t size) = "malloc(sizeof(" <> toCType t <> ") * " <> show size <> ")"
 
-toCData :: ExplicitDataData -> String
-toCData (EDTaggedUnion (Tag tag) vars) = "&(taggedunion){.tag = " <> show tag <> ", .data = (void*) 0}" --TODO: Tagged union vars
+declareCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
+declareCFunction (Function name arg _ (body, ret))
+  = cFunDecl (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")]
 
-cFunction :: String -> [String] -> String -> String
-cFunction name params body = "void* " <> name <> "(" <> mkParams <> ") {\n" <> body <> "\n}"
-  where
-    mkParams = intercalate ", " (("void* " <>) <$> params)
+cFunction :: String -> [(ASMType, String)] -> String -> String
+cFunction name params body = "void* " <> name <> "(" <> mkParams params <> ") {\n" <> body <> "}"
 
-cFunDecl :: String -> [String] -> String
-cFunDecl name params = "void* " <> name <> "(" <> mkParams <> ");\n"
-  where
-    mkParams = intercalate ", " (("void* " <>) <$> params)
+cFunDecl :: String -> [(ASMType, String)] -> String
+cFunDecl name params = "void* " <> name <> "(" <> mkParams params <> ");\n"
+
+mkParams :: [(ASMType, String)] -> String
+mkParams params = intercalate ", " ((\(t, v) -> toCType t <> " " <> v) <$> params)
 
 toCName :: Name -> String
 toCName (Specified n) = n
-toCName (Generated (GenVar n)) = "__generated_" <> show n
+toCName (Generated c (GenVar n)) = "__" <> c <> "generated_" <> show n
 
 toCFnName :: FunctionName -> String
 toCFnName (FunctionName n) = "__fn" <> toCName n
 
-compileToC :: [DataDecl] -> Term -> Maybe String
-compileToC ds t = toC <$> (toHLA =<< (flip evalStateT (GenVar 0) $ flip runReaderT ds $ toExplicitData $ lambdaLift $ eraseTypes t))
+toCType :: ASMType -> String
+toCType = cata alg where
+  alg :: Base ASMType String -> String
+  alg VoidF = "void"
+  alg ClosureF = "closure"
+  alg TaggedUnionF = "taggedunion"
+  alg (PtrF t) = t <> "*"
+
+compileToC :: MonadError CompilerError m => [DataDecl] -> Term -> m String
+compileToC ds t = toC <$> (flip evalStateT (GenVar 0) $ toHLA =<< (flip runReaderT ds $ (withError CEDError . toExplicitData) =<< (lambdaLift $ eraseTypes t)))
 
 mkTaggedUnionStruct :: String
 mkTaggedUnionStruct = "typedef struct {\n\tint tag;\n\tvoid* data;\n} taggedunion;\n"
+
+mkClosureStruct :: String
+mkClosureStruct = "typedef struct {\n\tvoid* (*f)(void*, void**);\n\tvoid** env;\n} closure;\n"
+
+mkClosureCallFn :: String
+mkClosureCallFn = "void* __closure_call(closure* f, void* arg) {\nreturn (f->f)(arg, f->env);\n}\n"
+
+data CompilerError
+  = CEDError ExplicitDataError
+  deriving Show
+
+-- to test
+-- mapM @(Except _) (writeFile "testing.c") (compileToC [bool,nat] patternMatchNat')
