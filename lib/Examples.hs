@@ -54,6 +54,22 @@ pair = (Lam (toEnum 0, (Ty 0))
                (App (App (Var (toEnum 2)) (Var (toEnum 5))) (Var (toEnum 6)))))))
 
 
+bool :: DataDecl
+bool = DataDecl
+  (Specified "Bool")
+  (Ty 0)
+  ([ (Specified "False", Var (Specified "Bool"))
+   , (Specified "True", Var (Specified "Bool"))])
+
+not' :: Term
+not' = Lam (var "b", v "Bool") $
+     Case (v "b")
+      [ CaseTerm (var "True") [] (Ctor (var "False") [])
+      , CaseTerm (var "False") [] (Ctor (var "True") [])]
+
+boolId :: Term
+boolId = Lam (var "x", Var (Specified "Bool")) (v "x")
+
 nat :: DataDecl
 nat = DataDecl
   (Specified "Nat")
@@ -62,6 +78,9 @@ nat = DataDecl
     ,(Specified "Succ",
        Pi (Specified "x",Var (Specified "Nat"))
          (Var (Specified "Nat")))])
+
+natId :: Term
+natId = Lam (var "x", natT) (v "x")
 
 var = Specified
 v = Var . var

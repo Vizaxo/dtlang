@@ -10,6 +10,7 @@ import Control.Lens
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 import Data.List
+import Data.Tuple
 import Data.Map (Map)
 import Data.Maybe
 import Data.Natural hiding (fold)
@@ -161,6 +162,7 @@ data ExplicitDataTerm
   | EDCase ExplicitDataTerm (Map Tag ([Name], ExplicitDataTerm))
   | EDLet [(Name, ExplicitDataTerm)] ExplicitDataTerm
   deriving Show
+makeBaseFunctor ''ExplicitDataTerm
 
 type ExplicitData = TermAndFunctions ExplicitDataTerm
 
@@ -232,7 +234,126 @@ interpretED (TermAndFunctions t fs) = interpret' (M.empty) t
           args' <- maybeMPlus $ mapM (flip M.lookup env) args
           interpret' (inserts bs args' env) caseTerm
     interpret' env (EDLet bs t) = do
-      bs' :: [(Name, ExplicitDataData)] <- traverseOf (each._2) (interpret' env) bs
+      bs' <- traverseOf (each._2) (interpret' env) bs
       interpret' (uncurry inserts (unzip bs') env) t
 
     inserts ks vs = foldr (.) id (M.insert <$> ks <*> vs)
+
+data HighLevelAsmExpr
+  = HLAEVar Name
+  | HLAEData ExplicitDataData
+  | HLAEFuncall FunctionName [Name]
+  | HLAEFunc FunctionName
+
+data HighLevelAsmStmt
+  = HLASAssign Name HighLevelAsmExpr
+  | HLASDeclare Name
+  | HLASDeclareAssign Name HighLevelAsmExpr
+  | HLASIf HighLevelAsmExpr HighLevelAsmStmt HighLevelAsmStmt
+  | HLASNop
+  | HLASBlock [HighLevelAsmStmt]
+  | HLASExpr HighLevelAsmExpr
+  | HLASSwitch Name (Map Tag HighLevelAsmStmt)
+makeBaseFunctor ''HighLevelAsmStmt
+
+instance Semigroup HighLevelAsmStmt where
+   a <> HLASNop = a
+   HLASNop <> b = b
+   (HLASBlock as) <> (HLASBlock bs) = HLASBlock (as ++ bs)
+   (HLASBlock as) <> b = HLASBlock (as ++ [b])
+   a <> (HLASBlock bs) = HLASBlock (a:bs)
+   a <> b = HLASBlock [a,b]
+instance Monoid HighLevelAsmStmt where
+  mempty = HLASNop
+  mappend = (<>)
+
+type HighLevelAsm = TermAndFunctions (HighLevelAsmStmt, HighLevelAsmExpr)
+
+toHLA :: MonadPlus m => ExplicitData -> m HighLevelAsm
+toHLA = mapM (flip evalStateT (GenVar 0) . (swap <$>) . runWriterT . cataM alg)
+  where
+    toExpr :: (MonadPlus m, MonadWriter HighLevelAsmStmt m, MonadState GenVar m) => Base ExplicitDataTerm HighLevelAsmExpr -> m HighLevelAsmExpr
+    toExpr (EDVarF n) = pure $ HLAEVar n
+    toExpr (EDFuncF f) = pure $ HLAEFunc f
+    toExpr (EDDataF d) = pure $ HLAEData d
+    toExpr (EDFuncallF f args) = pure $ HLAEFuncall f args
+    toExpr (EDCaseF term cases) = do
+      --TODO: variable bindings in case
+      v <- freshName
+      tag <- freshName
+      tell $ HLASDeclare v
+      tell $ HLASDeclareAssign tag term
+      tell $ HLASSwitch tag (HLASAssign v . snd <$> cases)
+      pure $ HLAEVar v
+    toExpr (EDLetF bs t) = do
+      mapM tell $ uncurry HLASDeclareAssign <$> bs
+      pure t
+
+    alg :: (MonadPlus m, MonadWriter HighLevelAsmStmt m, MonadState GenVar m) => Base ExplicitDataTerm HighLevelAsmExpr -> m HighLevelAsmExpr
+    alg = toExpr
+
+    unHLASExpr (HLASExpr e) = e
+
+toC :: HighLevelAsm -> String
+toC (TermAndFunctions t fs)
+  = headers <> mkTaggedUnionStruct <> decls
+  <> intercalate "\n" (mkMain : (mkCFunction <$> fs))
+  where
+    decls = concatMap declareCFunction fs
+    mkMain = cFunction "main" [] (toCStmt (fst t) <> "printf(\"%d\\n\", ((taggedunion*)" <> toCExpr (snd t) <> ")->tag);\n")
+
+    headers = "#include <stdio.h>\n\n"
+
+declareCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
+declareCFunction (Function name params (body, ret))
+  = cFunDecl (toCFnName name) (toCName <$> params)
+
+mkCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
+mkCFunction (Function name params (body, ret))
+  = cFunction (toCFnName name) (toCName <$> params) (toCStmt body <> "return " <> toCExpr ret <> ";\n")
+
+toCStmt :: HighLevelAsmStmt -> String
+toCStmt = cata alg where
+  alg (HLASAssignF n e) = toCName n <> " = " <> toCExpr e <> ";\n"
+  alg (HLASDeclareF n) = "void* " <> toCName n <> ";\n"
+  alg (HLASDeclareAssignF n e) = "void* " <> toCName n <> " = " <> toCExpr e <> ";\n"
+  alg (HLASIfF cond t f) = "if (" <> toCExpr cond <> ") {\n" <> t <> "} else {\n" <> f <> "}\n"
+  alg HLASNopF = ";\n"
+  alg (HLASBlockF ss) = concat ss
+  alg (HLASExprF e) = toCExpr e <> ";\n"
+  alg (HLASSwitchF n cases) = "switch (((taggedunion*)" <> toCName n <> ")->tag) {\n" <> concat (toCCase <$> M.toList cases) <> "}\n"
+
+  toCCase :: (Tag, String) -> String
+  toCCase (Tag t, s) = "case " <> show t <> ":\n" <> s <> "break;\n"
+
+toCExpr :: HighLevelAsmExpr -> String
+toCExpr (HLAEVar n) = toCName n
+toCExpr (HLAEData d) = toCData d
+toCExpr (HLAEFuncall f params) = toCFnName f <> "(" <> (intercalate ", " (toCName <$> params)) <> ")"
+toCExpr (HLAEFunc f) = toCFnName f
+
+toCData :: ExplicitDataData -> String
+toCData (EDTaggedUnion (Tag tag) vars) = "&(taggedunion){.tag = " <> show tag <> ", .data = (void*) 0}" --TODO: Tagged union vars
+
+cFunction :: String -> [String] -> String -> String
+cFunction name params body = "void* " <> name <> "(" <> mkParams <> ") {\n" <> body <> "\n}"
+  where
+    mkParams = intercalate ", " (("void* " <>) <$> params)
+
+cFunDecl :: String -> [String] -> String
+cFunDecl name params = "void* " <> name <> "(" <> mkParams <> ");\n"
+  where
+    mkParams = intercalate ", " (("void* " <>) <$> params)
+
+toCName :: Name -> String
+toCName (Specified n) = n
+toCName (Generated (GenVar n)) = "__generated_" <> show n
+
+toCFnName :: FunctionName -> String
+toCFnName (FunctionName n) = "__fn" <> toCName n
+
+compileToC :: [DataDecl] -> Term -> Maybe String
+compileToC ds t = toC <$> (toHLA =<< (flip evalStateT (GenVar 0) $ flip runReaderT ds $ toExplicitData $ lambdaLift $ eraseTypes t))
+
+mkTaggedUnionStruct :: String
+mkTaggedUnionStruct = "typedef struct {\n\tint tag;\n\tvoid* data;\n} taggedunion;\n"
