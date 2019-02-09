@@ -24,6 +24,17 @@ executable dtlang-repl
                      , mtl
                      , text
 
+executable dtlang-compiler
+  hs-source-dirs:      bin/compiler
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  default-extensions:  LambdaCase
+  build-depends:       base >= 4.7 && < 5
+                     , dtlang
+                     , temporary
+                     , text
+                     , process
+
 library
   hs-source-dirs:      lib
   default-language:    Haskell2010
@@ -60,7 +71,6 @@ library
                      , parsec
                      , recursion-schemes
                      , text
-                     , process
                      , transformers
                      , containers
   exposed-modules:     Equality

@@ -62,3 +62,7 @@ withError f ma = do
   runExceptT ma >>= \case
     Left e -> throwError (f e)
     Right x -> pure x
+
+handleErrM :: Applicative m => Either a b -> (a -> m b) -> m b
+handleErrM (Left x) f = f x
+handleErrM (Right y) f = pure y

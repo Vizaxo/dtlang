@@ -88,6 +88,13 @@ parser s = toToplevel $ parse (sexpTree <* eof) "" =<< parse lexer "" s
     toToplevel (Left e) = Left (ErrLex e)
     toToplevel (Right t) = maybe (Left ErrParse) Right (topLevel t)
 
+parseTerm :: Text -> Either LexerParserError Term
+parseTerm s = toTerm $ parse (sexpTree <* eof) "" =<< parse lexer "" s
+  where
+    toTerm :: Either ParseError TokenTree -> Either LexerParserError Term
+    toTerm (Left e) = Left (ErrLex e)
+    toTerm (Right t) = maybe (Left ErrParse) Right (term t)
+
 replParser :: Text -> Either LexerParserError ReplExpr
 replParser s = toReplExpr $ parse (sexpTree <* eof) "" =<< parse lexer "" s
   where
