@@ -3,7 +3,6 @@ module Term where
 import Types
 import Utils
 
-import Data.Bifunctor
 import Data.Functor.Foldable
 import Data.List
 
@@ -13,9 +12,10 @@ maxNesting = cata alg
   where
     alg :: TermF Int -> Int
     alg (VarF v) = 0
+    alg (CtorF c args) = maximum args + 1
     alg (LamF (_,b) t) = max b (t + 1)
     alg (PiF (_,b) t) = max b (t + 1)
-    alg (AppF a b) = max a b
+    alg (AppF a b) = max a b + 1
     alg (TyF _) = 0
     alg (CaseF t branches) = max t (caseNesting branches)
 
@@ -59,30 +59,45 @@ oldNewCata alg f = let f' = Fix (oldNewCata alg <$> unfix f) in
 
 -- | Pretty-print a term.
 prettyPrint :: Term -> String
-prettyPrint (Var v) = show v
-prettyPrint (Lam (u,uTy) body) = "\\" <> show u <> ":" <> prettyPrint uTy <> ". (" <> prettyPrint body <> ")"
-prettyPrint (Pi (u,uTy) ret) = show u <> ":" <> prettyPrint uTy <> " -> (" <> prettyPrint ret <> ")"
-prettyPrint (App a b) = "(" <> prettyPrint a <> ") (" <> prettyPrint b <> ")"
-prettyPrint (Ty n) = "(Type " <> show n <> ")"
+prettyPrint = cata alg where
+  alg (VarF v) = show v
+  alg (CtorF c args) = "(" <> show c <> intercalate " " args <> ")"
+  alg (LamF (u,uTy) body) = "\\" <> show u <> ":" <> uTy <> ". (" <> body <> ")"
+  alg (PiF (u,uTy) ret) = show u <> ":" <> uTy <> " -> (" <> ret <> ")"
+  alg (AppF a b) = "(" <> a <> ") (" <> b <> ")"
+  alg (TyF n) = "(Type " <> show n <> ")"
+  alg (CaseF t terms) = "(case " <> show t <> " of " <> show terms <> ")"
 
 -- | Get a list of all the bound and free variables in a term.
 allVars :: Term -> [Name]
-allVars t = freeVars t ++ boundVars t
+allVars t = freeVars t <> boundVars t
 
 -- | Get a list of all the free variables in a term.
 freeVars :: Term -> [Name]
-freeVars (Var v) = [v]
-freeVars (Ctor c args) = concat (freeVars <$> args)
-freeVars (Lam (v,ty) body) = nub (freeVars body ++ freeVars ty) \\ [v]
-freeVars (Pi (v,a) ret) = nub (freeVars ret ++ freeVars a) \\ [v]
-freeVars (App a b) = nub $ freeVars a ++ freeVars b
-freeVars (Ty _) = []
+freeVars = cata alg where
+  alg (VarF v) = [v]
+  alg (CtorF c args) = nub $ concat args
+  alg (LamF (v,ty) body) = nub (body <> ty) \\ [v]
+  alg (PiF (v,a) ret) = nub (ret <> a) \\ [v]
+  alg (AppF a b) = nub $ a <> b
+  alg (TyF _) = []
+  alg (CaseF t cs) = nub $ t <> concatMap caseTermFrees cs
+
+  caseTermFrees (CaseTerm _ bs e) = nub (concatMap bindingFrees bs <> e) \\ (fst <$> bs)
+
+  bindingFrees (v, t) = t \\ [v]
 
 -- | Get a list of all the bound variables in a term.
 boundVars :: Term -> [Name]
-boundVars (Var v) = []
-boundVars (Ctor c args) = concat (boundVars <$> args)
-boundVars (Lam (v,_) body) = v:boundVars body
-boundVars (Pi (v,_) ret) = v:boundVars ret
-boundVars (App a b) = boundVars a ++ boundVars b
-boundVars (Ty _) = []
+boundVars = cata alg where
+  alg (VarF v) = []
+  alg (CtorF c args) = concat args
+  alg (LamF (v,_) body) = v:body
+  alg (PiF (v,_) ret) = v:ret
+  alg (AppF a b) = a <> b
+  alg (TyF _) = []
+  alg (CaseF t cs) = t <> concatMap caseTermBounds cs
+
+  caseTermBounds (CaseTerm _ bs t) = concatMap bindingBounds bs <> t
+
+  bindingBounds (v, t) = v:t

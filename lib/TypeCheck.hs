@@ -10,7 +10,6 @@ import Control.Lens hiding (Context)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.List
-import Data.Ord
 
 -- | Predicate of whether a given term is well-typed in the given context.
 wellTyped :: Context -> Term -> Bool

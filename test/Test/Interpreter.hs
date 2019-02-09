@@ -5,12 +5,10 @@ import Test.Generators
 import Equality
 import Examples
 import TC
-import Term
 import TypeCheck
 import Types
 
 import Data.Either
-import Test.QuickCheck
 
 -- | Any well-typed term should not give an error when interpreted to normal
 --   form.

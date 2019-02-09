@@ -2,10 +2,8 @@ module Main where
 
 import Equality
 import Examples
-import Term
 import TC
 import Types
-import TypeCheck
 
 import Test.BackTrackGen
 import Test.DataTypes
@@ -13,7 +11,6 @@ import Test.Generators
 import Test.Interpreter
 import Test.TypeCheck
 
-import Data.Either
 import Data.Maybe
 import Test.Tasty
 import Test.Tasty.HUnit

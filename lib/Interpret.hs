@@ -1,7 +1,6 @@
 module Interpret where
 
 import Equality
-import Examples
 import TC
 import Types
 

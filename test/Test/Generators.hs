@@ -1,7 +1,6 @@
 module Test.Generators where
 
 import Equality
-import Examples
 import Term
 import Test.BackTrackGen
 import TC hiding (fresh)
@@ -13,10 +12,9 @@ import Control.Lens hiding (Context, elements)
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-import Data.Maybe
 import Data.Natural hiding (view)
 import QuickCheck.GenT
-import Test.QuickCheck (Property, Arbitrary, arbitrary, shrink, Gen, shrinkList, collect, (===))
+import Test.QuickCheck (Arbitrary, arbitrary, shrink, Gen)
 
 type GenTerm = Term -> Context -> [Name] -> BackTrackGen Term
 
@@ -195,7 +193,7 @@ instance Arbitrary GenVar where
   arbitrary = GenVar <$> arbitrary
 
 instance Arbitrary Name where
-  arbitrary = oneof [Specified <$> arbitrary, Generated <$> arbitrary]
+  arbitrary = oneof [Specified <$> arbitrary, Generated "arbitrary" <$> arbitrary]
 
 instance Arbitrary Context where
   --TODO: arbitrary data declarations

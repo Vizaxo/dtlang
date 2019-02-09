@@ -5,15 +5,10 @@ import Test.Generators
 import Equality
 import Examples
 import TC
-import Term
 import TypeCheck
 import Types
 
 import Control.Monad.Except
-import Control.Monad.Trans.MultiState
-import Data.Either
-import Test.QuickCheck
-import Test.Tasty.HUnit
 
 -- | Make sure that the arbitrary instance for WellTyped generates well-typed terms.
 prop_genWellTyped :: Context -> WellTyped -> Bool
