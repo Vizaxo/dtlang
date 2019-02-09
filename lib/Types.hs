@@ -59,6 +59,7 @@ pattern Pi bind e = Fix (PiF bind e)
 pattern App a b = Fix (AppF a b)
 pattern Ty n = Fix (TyF n)
 pattern Case e ts = Fix (CaseF e ts)
+{-# COMPLETE Var, Ctor, Lam, Pi, App, Ty, Case #-}
 
 type Binding = BindingF Term
 

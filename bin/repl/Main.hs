@@ -7,12 +7,10 @@ import TC
 import TypeCheck
 import Types
 
-import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Bifunctor
 import Data.Text (Text, pack)
-import qualified Data.Text as T
 
 data ReplError
   = ErrLexParse LexerParserError

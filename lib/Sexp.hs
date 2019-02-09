@@ -5,9 +5,7 @@ module Sexp where
 
 import Lexer
 
-import Data.Functor.Classes
 import Data.Functor.Foldable
-import GHC.Generics
 import Text.Parsec
 import Text.Show.Deriving
 

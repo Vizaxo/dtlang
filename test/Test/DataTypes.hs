@@ -101,11 +101,11 @@ test_patternMatchNatTypeCheck
 test_patternMatchNatWhnfZero
   = assertRightAlphaEq
       (defaultCtx >>= flip runTC (whnf (patternMatchNat `App` zero)))
-      (succ' `App` zero)
+      (succ' zero)
 
 test_patternMatchNatWhnfOne
   = assertRightAlphaEq
-      (defaultCtx >>= flip runTC (whnf (patternMatchNat `App` (succ' `App` zero))))
+      (defaultCtx >>= flip runTC (whnf (patternMatchNat `App` (succ' zero))))
       zero
 
 

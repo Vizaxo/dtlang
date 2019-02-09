@@ -1,7 +1,6 @@
 module Lexer (Token (..), TokParser, lexer, expect) where
 
 import Control.Monad
-import Data.Foldable
 import Data.String
 import Data.Text
 import Text.Parsec

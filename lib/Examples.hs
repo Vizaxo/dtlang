@@ -5,7 +5,6 @@ import Types
 import TypeCheck
 
 import Control.Monad.Reader hiding (void)
-import Data.Either
 
 defaultCtx :: Either TypeError Context
 defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
@@ -139,18 +138,12 @@ succT = Var (Specified "Succ")
 three :: Term
 three = succT `App` succT `App` succT `App` zeroT
 
+patternMatchNat :: Term
 patternMatchNat
   = Lam (var "n", natT) $
      Case (v "n")
-      [CaseTerm (var "Zero") [] (Ctor (var "Succ") [Ctor (var "Zero") []])
-      ,CaseTerm (var "Succ") [(var "n", natT)] (Ctor (var "Zero") [])]
-
-patternMatchNat'
-  = Case (Ctor (var "Succ") [Ctor (var "Succ") [Ctor (var "Zero") []]])
-      [CaseTerm (var "Zero") [] (Ctor (var "Succ") [Ctor (var "Zero") []])
-      ,CaseTerm (var "Succ") [(var "n", natT)] (v "n")]
-
-testCase = (Ctor (var "Succ") [Ctor (var "Zero") []])
+      [CaseTerm (var "Zero") [] (succ' zero)
+      ,CaseTerm (var "Succ") [(var "n", natT)] zero]
 
 void :: DataDecl
 void = DataDecl
@@ -179,10 +172,14 @@ plus = Definition (Specified "plus") (Pi (var "n", natT) $ Pi (var "m", natT) $ 
                 , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
                 ])
 
+plusTerm :: Term
 plusTerm = (Lam (var "n", natT) $ Lam (var "m", natT) $
    Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
                 , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
                 ])
 
+k :: Term
 k = Lam (var "a", natT) (Lam (var "b", natT) (v "a"))
+
+closureTest :: Term
 closureTest = k `App` (succ' zero) `App` zero

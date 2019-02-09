@@ -1,7 +1,6 @@
 module Utils where
 
 import Control.Monad.Except
-import Control.Monad.State
 import Data.Functor.Foldable
 import Data.List
 import Debug.Trace
@@ -24,6 +23,9 @@ fixM f x | (x >>= f) == x = x
 without :: [a] -> Int -> [a]
 without (x:xs) 0 = xs
 without (x:xs) n = x : without xs (n-1)
+without xs i = error
+  $ "without: list index " <> show i
+  <> "out of bounds of list length " <> show (length xs)
 
 -- | Throw an error if the given assertion fails.
 assert True e = return ()

@@ -8,11 +8,8 @@ import qualified Types as T
 
 import Prelude hiding (pi)
 import Control.Applicative
-import Control.Monad
-import Data.Bifunctor
 import Data.Text hiding (map)
 import Text.Parsec hiding ((<|>))
-import Text.Parsec.Text
 
 data LexerParserError
   = ErrLex ParseError
