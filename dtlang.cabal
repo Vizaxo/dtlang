@@ -63,7 +63,6 @@ library
                      , ViewPatterns
   build-depends:       base >= 4.7 && < 5
                      , QuickCheck
-                     , deriving-compat
                      , lens
                      , mtl
                      , multistate

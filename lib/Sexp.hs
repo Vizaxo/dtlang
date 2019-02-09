@@ -5,16 +5,11 @@ module Sexp where
 
 import Lexer
 
-import Data.Functor.Foldable
+import Data.Functor.Foldable.TH
 import Text.Parsec
-import Text.Show.Deriving
 
-data SexpTreeF t r = SexpTreeF [r] | NodeF t
-$(deriveShow1 'SexpTreeF)
-
-type SexpTree t = Fix (SexpTreeF t)
-pattern SexpTree r = Fix (SexpTreeF r)
-pattern Node t = Fix (NodeF t)
+data SexpTree t = SexpTree [SexpTree t] | Node t
+makeBaseFunctor ''SexpTree
 
 type TokenTree = SexpTree Token
 

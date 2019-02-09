@@ -50,8 +50,8 @@ data OldNew a = Old | New | Replace a
 -- sub-term without the recursive call applied (@Old@), with the
 -- recursive call applied (@New@), or replaced with a completely
 -- separate term (@Replace x@).
-oldNewCata :: Functor f => (Fix f -> OldNew (Fix f)) -> Fix f -> Fix f
-oldNewCata alg f = let f' = Fix (oldNewCata alg <$> unfix f) in
+oldNewCata :: (Recursive t, Corecursive t) => (t -> OldNew t) -> t -> t
+oldNewCata alg f = let f' = embed (oldNewCata alg <$> project f) in
   case alg f' of
     Old -> f
     New -> f'
