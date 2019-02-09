@@ -65,7 +65,7 @@ typeCheck (Case e xs) = do
       | otherwise = do
           ty' <- whnf ty
           bindings' <- mapM (traverseOf _2 whnf) bindings
-          tcArgList ty' (snd <$> bindings')
+          tcArgListTys ty' (snd <$> bindings')
           foldl (flip extendCtx) (typeCheck expr) bindings'
 
 -- | Check that a list of arguments could be applied to a term with a
@@ -73,11 +73,19 @@ typeCheck (Case e xs) = do
 -- result of this application.
 tcArgList (Pi (x, xTy) ret) (yTy:bs) = do
   --TODO: better type errors
-  xTy `betaEq` yTy
+  yTy `hasType` xTy
   extendCtx (x,xTy) $ tcArgList ret bs
 tcArgList ty [] = do
   return ty
 tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
+
+tcArgListTys (Pi (x, xTy) ret) (yTy:bs) = do
+  --TODO: better type errors
+  xTy `betaEq` yTy
+  extendCtx (x,xTy) $ tcArgListTys ret bs
+tcArgListTys ty [] = do
+  return ty
+tcArgListTys _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
 
 typeCheckTopLevel :: TopLevel -> TC Context
 typeCheckTopLevel (TLData d) = typeCheckData d
