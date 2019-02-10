@@ -5,7 +5,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
-import Control.Lens
+import Control.Lens hiding (Context)
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 import Data.List
@@ -14,6 +14,7 @@ import Data.Map (Map)
 import Data.Maybe
 import qualified Data.Map as M
 
+import Equality
 import Types
 import Utils
 
@@ -24,6 +25,12 @@ data ErasedCaseTermF r = ECaseTermF
   }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 makeLenses ''ErasedCaseTermF
+
+partiallyApplyCtors :: forall m. MonadReader Context m => Term -> m Term
+partiallyApplyCtors = cataM alg where
+  alg :: TermF Term -> m Term
+  alg (VarF v) = partiallyApplyCtor v
+  alg t = pure (embed t)
 
 -- | Terms but with types erased
 data ErasedTerm
@@ -161,7 +168,7 @@ data ExplicitDataError
   = EDCtorNotFound Constructor
   deriving Show
 
-toExplicitData :: forall m. (MonadReader [DataDecl] m, MonadError ExplicitDataError m, MonadState GenVar m) => LamLifted -> m ExplicitData
+toExplicitData :: forall m. (MonadReader Context m, MonadError ExplicitDataError m, MonadState GenVar m) => LamLifted -> m ExplicitData
 toExplicitData = mapM (cataM alg)
   where
     alg :: Base LamLiftedTerm ExplicitDataTerm -> m ExplicitDataTerm
@@ -181,10 +188,10 @@ toExplicitData = mapM (cataM alg)
     convertCase :: ErasedCaseTermF ExplicitDataTerm -> m (Tag, ([Name], ExplicitDataTerm))
     convertCase (ECaseTermF ctor bs e) = (, (bs, e)) <$> getCtorTag ctor
 
-getCtorTag :: (MonadReader [DataDecl] m, MonadError ExplicitDataError m) => Constructor -> m Tag
+getCtorTag :: (MonadReader Context m, MonadError ExplicitDataError m) => Constructor -> m Tag
 getCtorTag c = do
-  datatypes <- ask
-  Tag <$> (maybe (throwError (EDCtorNotFound c))  pure $ listToMaybe $ catMaybes (ctorIndex <$> datatypes))
+  datas <- datatypes <$> ask
+  Tag <$> (maybe (throwError (EDCtorNotFound c))  pure $ listToMaybe $ catMaybes (ctorIndex <$> datas))
   where
     ctorIndex :: DataDecl -> Maybe Int
     ctorIndex (DataDecl _ _ ((fst <$>) -> ctors))
@@ -263,11 +270,8 @@ toHLA = mapM (fmap swap . cataM alg)
     alg (EDAppF (f,s) (arg,s')) = pure (HLAEApp f arg, s <> s')
     alg (EDCaseF (scrutinee, s) cases) = do
       v <- freshName "case"
-      let mkCase (bindings, (expr,s')) = HLASBlock $
-            (s':) $
-            mkBindings bindings scrutinee <>
-            [ HLASAssign v expr
-            ]
+      let mkCase (bindings, (expr,s')) = mconcat $
+            mkBindings bindings scrutinee <> [s', HLASAssign v expr]
       let stmt = s
             <> HLASDeclare (Ptr Void) v
             <> HLASSwitch (HLAEStructMember scrutinee "tag") (mkCase <$> cases)
@@ -357,8 +361,11 @@ toCType = cata alg where
   alg TaggedUnionF = "taggedunion"
   alg (PtrF t) = t <> "*"
 
-compileToC :: MonadError CompilerError m => [DataDecl] -> Term -> m String
-compileToC ds t = toC <$> (flip evalStateT (GenVar 0) $ toHLA =<< (flip runReaderT ds $ (withError CEDError . toExplicitData) =<< (lambdaLift $ eraseTypes t)))
+compileToC :: MonadError CompilerError m => Context -> Term -> m String
+compileToC ctx = flip evalStateT (GenVar 0) . flip runReaderT ctx
+  . fmap toC
+  . (toHLA <=< (withError CEDError . toExplicitData) <=< lambdaLift <=< fmap eraseTypes)
+  . partiallyApplyCtors
 
 mkTaggedUnionStruct :: String
 mkTaggedUnionStruct = "typedef struct {\n\tint tag;\n\tvoid* data;\n} taggedunion;\n"

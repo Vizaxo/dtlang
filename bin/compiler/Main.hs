@@ -11,7 +11,6 @@ import Examples
 import Parser
 import TC
 import TypeCheck
-import Types
 import Utils
 
 main :: IO ()
@@ -26,7 +25,7 @@ main = getArgs >>= \case
       Left e ->
         putStrLn "Error type checking term:" >> print e >> exitFailure
       Right ty -> putStrLn $ "Term had type " <> show ty
-    cSrc <- handleErrM (compileToC (datatypes ctx) term) $
+    cSrc <- handleErrM (compileToC ctx term) $
         \e -> putStrLn "Error type checking term:" >> print e >> exitFailure
     cSrcFile <- writeSystemTempFile ("dtlang-" <> outfile <> ".c") cSrc
     exitWith =<< system ("gcc '" <> cSrcFile <> "' -o '" <> outfile <> "'")

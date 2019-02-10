@@ -197,14 +197,7 @@ fully applied 'Ctor'.
 
 If the variable is not a constructor, it cannot be reduced.
 
-> whnf (Var v) = do
->   ctx <- ask
->   case lookupEnv v ctx of
->     Just t -> whnf t
->     Nothing ->
->       catchError
->         (partiallyApplyCtor v)
->         (\_ -> return (Var v))
+> whnf (Var v) = partiallyApplyCtor v
 
 Any other term is already in whnf.
 
@@ -228,17 +221,17 @@ Convert a type to whnf.
 Eta-expand a constructor, so that constructors are always fully applied.
 The type is assumed to be in whnf.
 
-> partiallyApplyCtor
->   :: (MonadError TypeError m, MonadReader Context m)
->   => Constructor -> m Term
-> partiallyApplyCtor c = do
->   ty <- lookupCtor c
->   return $ partiallyApplyCtor' c ty []
+> partiallyApplyCtor :: MonadReader Context m => Name -> m Term
+> partiallyApplyCtor v = do
+>   lookupEnv v <$> ask >>= \case
+>     Just t -> pure $ Var v
+>     Nothing ->
+>       fromRight (Var v) <$> runExceptT (partiallyApplyCtor' [] <$> lookupCtor v)
 >   where
->     partiallyApplyCtor' c (Pi (x,ty) ret) args
->       = Lam (x,ty) (partiallyApplyCtor' c ret (Var x:args))
->     partiallyApplyCtor' c _ args
->       = Ctor c args
+>     partiallyApplyCtor' args (Pi (x,ty) ret)
+>       = Lam (x,ty) (partiallyApplyCtor' (Var x:args) ret)
+>     partiallyApplyCtor' args _
+>       = Ctor v args
 
 Helper functions for using these equalities in different contexts
 
