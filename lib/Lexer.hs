@@ -63,7 +63,7 @@ endComment :: Parser ()
 endComment = void $ string "-}"
 
 comment :: Parser Token
-comment = Comment <$> (startComment *> manyTill anyChar endComment)
+comment = Comment <$> (startComment *> manyTill anyChar (try endComment))
 
 num :: Parser Token
 num = toNum . fmap pack $ many digit
@@ -76,10 +76,13 @@ num = toNum . fmap pack $ many digit
         Nothing -> mzero
 
 tok :: Parser Token
-tok = many comment *> (reserved <|> identifier <|> num)
+tok = reserved <|> identifier <|> num
+
+discard :: Parser ()
+discard = void $ many (void space <|> void comment)
 
 lexer :: Parser [Token]
-lexer = spaces *> sepBy tok spaces <* eof
+lexer = discard *> sepEndBy tok discard <* eof
 
 expect :: Token -> TokParser ()
 expect t = tokenPrim show (\p _ _ -> p) (\t' -> if (t' == t) then Just () else Nothing)
