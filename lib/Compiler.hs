@@ -263,17 +263,17 @@ toHLA = mapM (fmap swap . cataM alg)
             <> HLASAssignArr tu 0 (HLAETaggedUnionExpr t arr)
       pure $ (HLAEVar tu, stmt)
     alg (EDMkClosureF f env) = do
-      ret <- freshName "closure_ret"
+      closure <- freshName "closure"
       envVar <- freshName "closure_env"
       let s = [HLASDeclareAssign (Ptr $ Ptr Void) envVar
                (HLAEMalloc (Ptr Void) (length env))]
             <> ((\(e, i) -> HLASAssignArr envVar i (HLAEVar e)) <$> zip env [0..])
-            <> [ HLASDeclareAssign (Ptr Closure) ret (HLAEMalloc Closure 1)
-               , HLASAssignArr ret 0 (HLAEMkClosure f envVar)]
-      pure (HLAEVar ret, HLASBlock s)
+            <> [ HLASDeclareAssign (Ptr Closure) closure (HLAEMalloc Closure 1)
+               , HLASAssignArr closure 0 (HLAEMkClosure f envVar)]
+      pure (HLAEVar closure, HLASBlock s)
     alg (EDAppF (f,s) (arg,s')) = pure (HLAEApp f arg, s <> s')
     alg (EDCaseF (scrutinee, s) cases) = do
-      v <- freshName "case"
+      v <- freshName "case_ret"
       let mkCase (bindings, (expr,s')) = mconcat $
             mkBindings bindings scrutinee <> [s', HLASAssign v expr]
       let stmt = s
@@ -292,57 +292,85 @@ toHLA = mapM (fmap swap . cataM alg)
 
 toC :: HighLevelAsm -> String
 toC (TermAndFunctions t fs)
-  = headers <> "\n" <> mkTaggedUnionStruct <> "\n" <> mkClosureStruct <> "\n" <> mkClosureCallFn
+  = headers
+  <> "\n" <> mkTaggedUnionStruct <> "\n" <> mkClosureStruct
+  <> "\n" <> mkClosureCallFn
   <> "\n" <> decls
-  <> "\n" <> intercalate "\n\n" (mkMain : (mkCFunction <$> fs))
+  <> "\n" <> intercalate "\n" (mkMain : (mkCFunction <$> fs))
   where
     decls = concatMap declareCFunction fs
 
-    mkMain = cFunction "main" [] (toCStmt (fst t) <> "printf(\"%d\\n\", ((taggedunion*)" <> toCExpr (snd t) <> ")->tag);\n")
+    mkMain = cFunction "main" [] $
+      toCStmt (fst t)
+      <> "printf(\"%d\\n\", ((taggedunion*)" <> toCExpr (snd t) <> ")->tag);\n"
 
-    headers = "#include <stdio.h>\n"
-            <> "#include <stdlib.h>\n"
+    headers = intercalate "\n" $ ("#include " <>) <$> ["<stdio.h>", "<stdlib.h>"]
 
 mkCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
 mkCFunction (Function name arg _ (HLASNop, ret))
-  = cFunction (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")] ("return " <> toCExpr ret <> ";\n")
+  = cFunction (toCFnName name)
+    [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")]
+    ("return " <> toCExpr ret <> ";\n")
 mkCFunction (Function name arg _ (body, ret))
-  = cFunction (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")] (toCStmt body <> "return " <> toCExpr ret <> ";\n")
+  = cFunction (toCFnName name)
+    [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")]
+    (toCStmt body <> "return " <> toCExpr ret <> ";\n")
 
 toCStmt :: HighLevelAsmStmt -> String
 toCStmt = cata alg where
-  alg (HLASAssignF n e) = toCName n <> " = " <> toCExpr e <> ";\n"
-  alg (HLASAssignArrF n i e) = toCName n <> "[" <> show i <> "] = " <> toCExpr e <> ";\n"
-  alg (HLASDeclareF t n) = toCType t <> toCName n <> ";\n"
-  alg (HLASDeclareArrF t n i) = toCType t <> toCName n <> "[" <> show i <> "];\n"
-  alg (HLASDeclareAssignF t n e) = toCType t <> toCName n <> " = " <> toCExpr e <> ";\n"
-  alg (HLASIfF cond t f) = "if (" <> toCExpr cond <> ") {\n" <> t <> "} else {\n" <> f <> "}\n"
-  alg HLASNopF = ";\n"
-  alg (HLASBlockF ss) = concat ss
-  alg (HLASExprF e) = toCExpr e <> ";\n"
-  alg (HLASSwitchF n cases) = "switch (" <> toCExpr n <> ") {\n" <> concat (toCCase <$> M.toList cases) <> "}\n"
+  alg (HLASAssignF n e)
+    = toCName n <> " = " <> toCExpr e <> ";\n"
+  alg (HLASAssignArrF n i e)
+    = toCName n <> "[" <> show i <> "] = " <> toCExpr e <> ";\n"
+  alg (HLASDeclareF t n)
+    = toCType t <> " " <> toCName n <> ";\n"
+  alg (HLASDeclareArrF t n i)
+    = toCType t <> " " <> toCName n <> "[" <> show i <> "];\n"
+  alg (HLASDeclareAssignF t n e)
+    = toCType t <> " " <> toCName n <> " = " <> toCExpr e <> ";\n"
+  alg (HLASIfF cond t f)
+    = "if (" <> toCExpr cond <> ") {\n" <> t <> "} else {\n" <> f <> "}\n"
+  alg HLASNopF
+    = ";\n"
+  alg (HLASBlockF ss)
+    = concat ss
+  alg (HLASExprF e)
+    = toCExpr e <> ";\n"
+  alg (HLASSwitchF n cases)
+    = "switch (" <> toCExpr n <> ") {\n" <> concat (toCCase <$> M.toList cases) <> "}\n"
 
   toCCase :: (Tag, String) -> String
-  toCCase (Tag t, s) = "case " <> show t <> ":\n{\n" <> s <> "break;\n}\n"
+  toCCase (Tag t, s)
+    = "case " <> show t <> ":\n{\n" <> s <> "break;\n}\n"
 
 toCExpr :: HighLevelAsmExpr -> String
-toCExpr (HLAEVar n) = toCName n
-toCExpr (HLAEEnvRef i) = "env[" <> show i <> "]"
-toCExpr HLAEUnit = "NULL" --TODO: not sure what this should be
-toCExpr (HLAETaggedUnionExpr (Tag tag) arr) = "(taggedunion){.tag = " <> show tag <> ", .data = " <> toCName arr <> "}" --TODO: don't dereference, malloc
-toCExpr (HLAEMkClosure f env) = "(closure){.f = " <> toCFnName f <> ", .env = " <> toCName env <> "}"
-toCExpr (HLAEApp f x) = "__closure_call(" <> toCExpr f <> ", " <> toCExpr x <> ")"
-  --toCFnName f <> "(" <> (intercalate ", " (toCName <$> params)) <> ")"
-toCExpr (HLAEIndexInto e i) = "((taggedunion**)" <> toCExpr e <> ")[" <> show i <> "]"
-toCExpr (HLAEStructMember e member) = "((taggedunion*)" <> toCExpr e <> ")->" <> member
-toCExpr (HLAEMalloc t size) = "malloc(sizeof(" <> toCType t <> ") * " <> show size <> ")"
+toCExpr = cata alg where
+  alg (HLAEVarF n)
+    =  toCName n
+  alg (HLAEEnvRefF i)
+    =  "env[" <> show i <> "]"
+  alg HLAEUnitF
+    =  "NULL"
+  alg (HLAETaggedUnionExprF (Tag tag) arr)
+    =  "(taggedunion){.tag = " <> show tag <> ", .data = " <> toCName arr <> "}"
+  alg (HLAEMkClosureF f env)
+    =  "(closure){.f = " <> toCFnName f <> ", .env = " <> toCName env <> "}"
+  alg (HLAEAppF f x)
+    =  "closure_call(" <> f <> ", " <> x <> ")"
+  alg (HLAEIndexIntoF e i)
+    =  "((taggedunion**)" <> e <> ")[" <> show i <> "]"
+  alg (HLAEStructMemberF e member)
+    =  "((taggedunion*)" <> e <> ")->" <> member
+  alg (HLAEMallocF t size)
+    =  "malloc(sizeof(" <> toCType t <> ") * " <> show size <> ")"
 
 declareCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
 declareCFunction (Function name arg _ (body, ret))
   = cFunDecl (toCFnName name) [(Ptr Void, toCName arg), (Ptr (Ptr Void), "env")]
 
 cFunction :: String -> [(ASMType, String)] -> String -> String
-cFunction name params body = "void* " <> name <> "(" <> mkParams params <> ") {\n" <> body <> "}"
+cFunction name params body
+  = "void* " <> name <> "(" <> mkParams params <> ") {\n" <> body <> "}\n"
 
 cFunDecl :: String -> [(ASMType, String)] -> String
 cFunDecl name params = "void* " <> name <> "(" <> mkParams params <> ");\n"
@@ -351,11 +379,11 @@ mkParams :: [(ASMType, String)] -> String
 mkParams params = intercalate ", " ((\(t, v) -> toCType t <> " " <> v) <$> params)
 
 toCName :: Name -> String
-toCName (Specified n) = n
-toCName (Generated c (GenVar n)) = "__" <> c <> "generated_" <> show n
+toCName (Specified n) = "user_" <> n
+toCName (Generated c (GenVar n)) = c <> "_" <> show n
 
 toCFnName :: FunctionName -> String
-toCFnName (FunctionName n) = "__fn" <> toCName n
+toCFnName (FunctionName n) = "fn_" <> toCName n
 
 toCType :: ASMType -> String
 toCType = cata alg where
@@ -365,24 +393,25 @@ toCType = cata alg where
   alg TaggedUnionF = "taggedunion"
   alg (PtrF t) = t <> "*"
 
-compileToC :: MonadError CompilerError m => Context -> Term -> m String
-compileToC ctx = flip evalStateT (GenVar 0) . flip runReaderT ctx
-  . fmap toC
-  . (toHLA <=< (withError CEDError . toExplicitData) <=< lambdaLift <=< fmap eraseTypes)
-  . partiallyApplyCtors
-
 mkTaggedUnionStruct :: String
-mkTaggedUnionStruct = "typedef struct {\n\tint tag;\n\tvoid* data;\n} taggedunion;\n"
+mkTaggedUnionStruct
+  = "typedef struct {\n\tint tag;\n\tvoid* data;\n} taggedunion;\n"
 
 mkClosureStruct :: String
-mkClosureStruct = "typedef struct {\n\tvoid* (*f)(void*, void**);\n\tvoid** env;\n} closure;\n"
+mkClosureStruct
+  = "typedef struct {\n\tvoid* (*f)(void*, void**);\n\tvoid** env;\n} closure;\n"
 
 mkClosureCallFn :: String
-mkClosureCallFn = "void* __closure_call(closure* f, void* arg) {\nreturn (f->f)(arg, f->env);\n}\n"
+mkClosureCallFn
+  = "void* closure_call(closure* f, void* arg) {\n\treturn (f->f)(arg, f->env);\n}\n"
+
 
 data CompilerError
   = CEDError ExplicitDataError
   deriving Show
 
--- to test
--- mapM @(Except _) (writeFile "testing.c") (compileToC [bool,nat] patternMatchNat')
+compileToC :: MonadError CompilerError m => Context -> Term -> m String
+compileToC ctx = flip evalStateT (GenVar 0) . flip runReaderT ctx
+  . fmap toC
+  . (toHLA <=< (withError CEDError . toExplicitData) <=< lambdaLift <=< fmap eraseTypes)
+  . partiallyApplyCtors
