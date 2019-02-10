@@ -255,9 +255,13 @@ toHLA = mapM (fmap swap . cataM alg)
     alg (EDEnvRefF i) = pure $ (HLAEEnvRef i, HLASNop)
     alg (EDTaggedUnionExprF t names) = do
       arr <- freshName "tagged_union_arr"
+      tu <- freshName "tagged_union"
       let assigns = (\(n, i) -> HLASAssignArr arr i (HLAEVar n)) <$> zip names [0..]
-      let stmt = HLASDeclareArr (Ptr Void) arr (length names) <> mconcat assigns
-      pure $ (HLAETaggedUnionExpr t arr, stmt)
+      let stmt = HLASDeclareArr (Ptr Void) arr (length names)
+            <> mconcat assigns
+            <> HLASDeclareAssign (Ptr TaggedUnion) tu (HLAEMalloc TaggedUnion 1)
+            <> HLASAssignArr tu 0 (HLAETaggedUnionExpr t arr)
+      pure $ (HLAEVar tu, stmt)
     alg (EDMkClosureF f env) = do
       ret <- freshName "closure_ret"
       envVar <- freshName "closure_env"
@@ -325,7 +329,7 @@ toCExpr :: HighLevelAsmExpr -> String
 toCExpr (HLAEVar n) = toCName n
 toCExpr (HLAEEnvRef i) = "env[" <> show i <> "]"
 toCExpr HLAEUnit = "NULL" --TODO: not sure what this should be
-toCExpr (HLAETaggedUnionExpr (Tag tag) arr) = "&(taggedunion){.tag = " <> show tag <> ", .data = " <> toCName arr <> "}" --TODO: don't dereference, malloc
+toCExpr (HLAETaggedUnionExpr (Tag tag) arr) = "(taggedunion){.tag = " <> show tag <> ", .data = " <> toCName arr <> "}" --TODO: don't dereference, malloc
 toCExpr (HLAEMkClosure f env) = "(closure){.f = " <> toCFnName f <> ", .env = " <> toCName env <> "}"
 toCExpr (HLAEApp f x) = "__closure_call(" <> toCExpr f <> ", " <> toCExpr x <> ")"
   --toCFnName f <> "(" <> (intercalate ", " (toCName <$> params)) <> ")"
