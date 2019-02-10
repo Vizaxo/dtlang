@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Types where
 
 import Data.Functor.Foldable.TH

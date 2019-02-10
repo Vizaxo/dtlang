@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 -- | Parse the lexed output into a sexp-tree, ready to be converted into terms.
 module Sexp where
 
