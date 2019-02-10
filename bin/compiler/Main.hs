@@ -1,6 +1,7 @@
 module Main where
 
 import qualified Data.Text as T
+import System.Directory
 import System.Environment
 import System.Exit
 import System.IO.Temp
@@ -28,5 +29,6 @@ main = getArgs >>= \case
     cSrc <- handleErrM (compileToC ctx term) $
         \e -> putStrLn "Error type checking term:" >> print e >> exitFailure
     cSrcFile <- writeSystemTempFile ("dtlang-" <> outfile <> ".c") cSrc
-    exitWith =<< system ("gcc '" <> cSrcFile <> "' -o '" <> outfile <> "'")
+    workingDir <- getCurrentDirectory
+    exitWith =<< system ("gcc -I" <> workingDir <> " '" <> cSrcFile <> "' -o '" <> outfile <> "'")
   _ -> getProgName >>= \p -> putStrLn $ "Usage: " <> p <> " srcfile.dtlang -o outfile"
