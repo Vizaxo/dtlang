@@ -9,6 +9,7 @@ import Data.Functor.Foldable.TH
 import Text.Parsec
 
 data SexpTree t = SexpTree [SexpTree t] | Node t
+  deriving Show
 makeBaseFunctor ''SexpTree
 
 type TokenTree = SexpTree Token
