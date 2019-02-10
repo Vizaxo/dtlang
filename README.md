@@ -47,6 +47,10 @@ The case construct scrutinises an expression, mapping each constructor (possibly
 >>> (Succ (Succ Zero)) : Nat
 ```
 
+## Compilation
+
+There is a basic compiler, which compiles the code to C and then invokes the system's C compiler to generate a binary.
+
 ## Running
 
 To build:
@@ -57,4 +61,9 @@ stack build
 The repl can be run with:
 ```sh
 stack exec dtlang-repl
+```
+
+The compiler can be invoked with:
+```sh
+stack exec dtlang-compiler -- srcfile.dtlang -o outfile
 ```
