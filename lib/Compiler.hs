@@ -203,7 +203,6 @@ data HighLevelAsmExpr
   | HLAEApp HighLevelAsmExpr HighLevelAsmExpr
   | HLAEStructMember HighLevelAsmExpr String
   | HLAEMemIndex HighLevelAsmExpr Int
-  | HLAEHeapAlloc Int
   deriving Show
 makeBaseFunctor ''HighLevelAsmExpr
 
@@ -215,13 +214,10 @@ data HLAAssignExpr
   deriving Show
 makeBaseFunctor ''HLAAssignExpr
 
-data HLADeclareExpr
-  = HLADName Name
-  deriving Show
-
 data HighLevelAsmStmt
   = HLASAssign HLAAssignExpr HighLevelAsmExpr
-  | HLASDeclare HLADeclareExpr
+  | HLASDeclare Name
+  | HLASDeclareHeapAlloc Name Int
   | HLASExpr HighLevelAsmExpr
   | HLASSwitch HighLevelAsmExpr (Map Tag HighLevelAsmStmt)
   | HLASBlock [HighLevelAsmStmt]
@@ -252,15 +248,13 @@ toHLA = mapM (fmap swap . cataM alg) where
   alg (TDTaggedUnionExprF t (unzip->(args, argStmts))) = do
     v <- freshName "tagged_union"
     let stmts = mconcat argStmts
-          <> HLASDeclare (HLADName v)
-          <> HLASAssign (HLAAName v) (HLAEHeapAlloc (length args))
+          <> HLASDeclareHeapAlloc v (length args)
           <> HLASAssign (HLAAStructMember v ("data.tag")) (HLAETag t)
           <> mconcat ((\(i, e) -> HLASAssign (HLAAMemIndex v i) e) <$> zip [0..] args)
     pure $ (HLAEVar v, stmts)
   alg (TDMkClosureF f env) = do
     cl <- freshName "closure"
-    let s = [ HLASDeclare (HLADName cl)
-            , HLASAssign (HLAAName cl) (HLAEHeapAlloc (length env))
+    let s = [ HLASDeclareHeapAlloc cl (length env)
             , HLASAssign (HLAAStructMember cl "data.f") (HLAEFuncVar f)
             ]
           <> ((\(v, i) -> HLASAssign (HLAAMemIndex cl i) (HLAEVar v))
@@ -273,8 +267,8 @@ toHLA = mapM (fmap swap . cataM alg) where
     let mkCase (bindings, (expr,s')) = mconcat $
           mkBindings bindings scrutineeV <> [s', HLASAssign (HLAAName v) expr]
     let stmt = s
-               <> HLASDeclare (HLADName v)
-               <> HLASDeclare (HLADName scrutineeV)
+               <> HLASDeclare v
+               <> HLASDeclare scrutineeV
                <> HLASAssign (HLAAName scrutineeV) scrutinee
                <> HLASSwitch (HLAEStructMember
                               (HLAEVar scrutineeV) "data.tag")
@@ -283,7 +277,7 @@ toHLA = mapM (fmap swap . cataM alg) where
   alg (TDLetF bs (t, s)) = do
     let assigns
           = (\(name,(e,s)) -> s
-              <> mconcat [ HLASDeclare (HLADName name)
+              <> mconcat [ HLASDeclare name
                          , HLASAssign (HLAAName name) e])
             <$> bs
     pure (t, mconcat assigns <> s)
@@ -292,7 +286,7 @@ toHLA = mapM (fmap swap . cataM alg) where
   mkBindings :: [Name] -> Name -> [HighLevelAsmStmt]
   mkBindings bindings scrutineeV
     = (\(name, i) -> mconcat
-        [ HLASDeclare (HLADName name)
+        [ HLASDeclare name
         , HLASAssign (HLAAName name) (HLAEMemIndex (HLAEVar scrutineeV) i)
         ])
       <$> zip bindings [0..]
@@ -301,18 +295,23 @@ toHLA = mapM (fmap swap . cataM alg) where
 toC :: MonadState GenVar m => HighLevelAsm -> m String
 toC (TermAndFunctions t fs)
   = do
-  mainStmt <- mkMain <$> toCStmt (fst t)
+  programStmt <- mkProgram <$> toCStmt (fst t)
+  let mainStmt = mkMain
   funs <- mapM mkCFunction fs
   pure $ "#include \"rts/headers.h\"\n"
     <> "\n" <> decls
-    <> "\n" <> intercalate "\n" (mainStmt : funs)
+    <> "\n" <> intercalate "\n" (programStmt : mainStmt : funs)
   where
     decls = concatMap declareCFunction fs
 
-    mkMain s = cFunction "main" "int" [] $
-      s
-      <> "printf(\"%d\\n\", (" <> toCExpr (snd t) <> ")->data.tag);\n"
-      <> "return 0;\n"
+    mkMain = cFunction "main" "int" [] $
+      "initialise_rts();\n"
+      <> "funcall(program);\n"
+      <> "run_gc();\nreturn 0;\n"
+
+    mkProgram s
+      = cFunction "program" "void" [] $
+      s <> "printf(\"%d\\n\", (" <> toCExpr (snd t) <> ")->data.tag);\n"
 
     headers = intercalate "\n" $ ("#include " <>) <$> ["<stdio.h>", "<stdlib.h>"]
 
@@ -329,6 +328,8 @@ toCStmt = cataM alg where
     = pure $ toCAssign a <> " = " <> (toCExpr e) <> ";\n"
   alg (HLASDeclareF d)
     = toCDeclare d
+  alg (HLASDeclareHeapAllocF v size)
+    = toCDeclareHeapAlloc v size
   alg HLASNopF
     = pure $ ";\n"
   alg (HLASBlockF ss)
@@ -343,11 +344,21 @@ toCStmt = cataM alg where
   toCCase (Tag t, s)
     = "case " <> show t <> ":\n{\n" <> s <> "break;\n}\n"
 
-toCDeclare :: MonadState GenVar m => HLADeclareExpr -> m String
-toCDeclare (HLADName (toCName -> v)) = do
+toCDeclareHeapAlloc :: MonadState GenVar m => Name -> Int -> m String
+toCDeclareHeapAlloc (toCName -> v) size = do
+  heapPtr <- toCName <$> freshName "heap_ptr"
+  let expr = "heap_data* " <> v <> " = heap_alloc(" <> show size <> ");\n"
+      hp = "heap_ptr " <> heapPtr <> " = (heap_ptr){.ptr = &"
+        <> v <> ", .next=NULL};\n"
+      moveHead = "head_heap_ptr->next = &" <> heapPtr <> ";\n"
+        <> "head_heap_ptr = &" <> heapPtr <> ";\n"
+  pure (expr <> hp <> moveHead)
+
+toCDeclare :: MonadState GenVar m => Name -> m String
+toCDeclare (toCName -> v) = do
   heapPtr <- toCName <$> freshName "heap_ptr"
   let expr = "heap_data* " <> v <> ";\n"
-      hp = "heap_ptr " <> heapPtr <> " = (heap_ptr){.ptr = "
+      hp = "heap_ptr " <> heapPtr <> " = (heap_ptr){.ptr = &"
         <> v <> ", .next=NULL};\n"
       moveHead = "head_heap_ptr->next = &" <> heapPtr <> ";\n"
         <> "head_heap_ptr = &" <> heapPtr <> ";\n"
@@ -381,8 +392,6 @@ toCExpr = cata alg where
     = "(" <> e <> ")->" <> member
   alg (HLAEMemIndexF e i)
     = "(" <> e <> ")->mem[" <> show i <> "]"
-  alg (HLAEHeapAllocF size)
-    = "heap_alloc(" <> show size <> ")"
 
 declareCFunction :: Function (HighLevelAsmStmt, HighLevelAsmExpr) -> String
 declareCFunction (Function name arg _ (body, ret))
