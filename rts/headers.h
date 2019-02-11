@@ -33,6 +33,7 @@ alloc_info* prev_alloc = NULL;
 void mark_heap(heap_data* addr);
 void mark_from_roots();
 void sweep();
+void run_gc();
 
 int allocated = 0;
 int deallocated = 0;
@@ -54,13 +55,15 @@ void* my_malloc(size_t size) {
 
 void mark(heap_data* user_addr) {
 	alloc_info* addr = ((alloc_info*)user_addr)-1;
+	printf("a\n");
+	printf("addr: %p\n", addr);
+	printf("*addr: %p\n", *addr);
+	printf("b\n");
 	addr->marked = 1;
 }
 
 heap_data* heap_alloc(size_t mem_count) {
-	mark_from_roots();
-	sweep();
-
+	run_gc();
 	heap_data* data = my_malloc(sizeof(heap_data) + sizeof(alloc_info));
 	if (mem_count == 0) {
 		data->mem = NULL;
@@ -112,7 +115,21 @@ void mark_heap(heap_data* addr) {
 
 void run_gc() {
 	mark_from_roots();
-	sweep();
+	//sweep();
+	//print_heap();
+}
+
+print_heap() {
+	printf("\tPrinting heap\n");
+	alloc_info* next = NULL;
+	alloc_info* curr = prev_alloc;
+	alloc_info* prev;
+	while(curr != NULL) {
+		alloc_info* prev = curr->prev;
+		printf("Heap node at %p. Marked: %d\n", curr, curr->marked);
+		next=curr;
+		curr=prev;
+	}
 }
 
 void sweep() {
@@ -123,28 +140,32 @@ void sweep() {
 	while(curr != NULL) {
 		alloc_info* prev = curr->prev;
 		if (curr->marked) {
-			//curr->marked = 0;
+			curr->marked = 0;
+			next=curr;
 		} else {
 			if (next != NULL)
 				next->prev = curr->prev; //Update the free list
+			if (prev_alloc == curr)
+				prev_alloc = curr->prev;
 			printf("Freeing %p\n", curr);
 			//TODO: freeing some things twice. Not
 			//properly removed from free list maybe?
 			free(curr);
 			deallocated++;
 		}
-		next=curr;
 		curr=prev;
 	}
 	printf("Allocated: %d. Deallocated: %d\n", allocated, deallocated);
 }
 
 void mark_from_roots() {
+	//TODO: fix segfault with case statements
+	// Doesn't segfault when this function is removed
 	heap_ptr* curr = &root_ptr;
 	while(curr != NULL) {
 		if (curr->ptr != NULL) {
 			mark(*(curr->ptr));
-			mark_heap(*(curr->ptr));
+			//mark_heap(*(curr->ptr));
 		}
 	        curr=curr->next;
 	}
