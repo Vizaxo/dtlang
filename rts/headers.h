@@ -55,10 +55,6 @@ void* my_malloc(size_t size) {
 
 void mark(heap_data* user_addr) {
 	alloc_info* addr = ((alloc_info*)user_addr)-1;
-	printf("a\n");
-	printf("addr: %p\n", addr);
-	printf("*addr: %p\n", *addr);
-	printf("b\n");
 	addr->marked = 1;
 }
 
@@ -105,7 +101,7 @@ void funcall(void (*f)()) {
 
 void mark_heap(heap_data* addr) {
 	heap_data** d = addr->mem;
-	if (d == NULL)
+	if ((((alloc_info*)addr)-1)->marked)
 		return;
 	for(; *d != NULL; d++) {
 		mark(*d);
@@ -113,14 +109,33 @@ void mark_heap(heap_data* addr) {
 	}
 }
 
-void run_gc() {
-	mark_from_roots();
-	//sweep();
-	//print_heap();
+void print_heap_rec(heap_data* addr) {
+	heap_data** d = addr->mem;
+	if ((((alloc_info*)addr)-1)->marked)
+		return;
+	for(; *d != NULL; d++) {
+		mark(*d);
+		printf("Heap node at %p\n", ((alloc_info*)*(d))-1);
+		print_heap_rec(*d);
+	}
 }
 
-print_heap() {
-	printf("\tPrinting heap\n");
+void print_heap_root_nodes() {
+	printf("\tRoots\n");
+	heap_ptr* curr = &root_ptr;
+	while(curr != NULL) {
+		if (curr->ptr != NULL) {
+			printf("Heap node at %p\n", ((alloc_info*)*(curr->ptr))-1);
+			mark(*(curr->ptr));
+			print_heap_rec(*(curr->ptr));
+		}
+	        curr=curr->next;
+	}
+	printf("\tFinished\n");
+}
+
+void print_heap_alloc_list() {
+	printf("\tAlloc list\n");
 	alloc_info* next = NULL;
 	alloc_info* curr = prev_alloc;
 	alloc_info* prev;
@@ -130,6 +145,16 @@ print_heap() {
 		next=curr;
 		curr=prev;
 	}
+	printf("\tFinished\n");
+}
+
+void run_gc() {
+	printf("#### GC ####\n");
+	mark_from_roots();
+	//print_heap_root_nodes();
+	//print_heap_alloc_list();
+	sweep();
+	//print_heap_alloc_list();
 }
 
 void sweep() {
