@@ -8,7 +8,7 @@
 > import Control.Monad.Except
 > import Control.Monad.Reader
 > import Data.Either
-> import Data.Maybe
+> import qualified Data.Map as M
 > import Test.QuickCheck
 
 Two terms are syntactically equal if their structures and variable
@@ -184,13 +184,14 @@ Otherwise, it can't be reduced.
 A case expression with a known scrutinee can be reduced by picking the
 appropriate branch.
 
-> whnf (Case e terms) =
+> whnf (Case e m terms) = do
+>   m' <- whnf m
 >   whnf e >>= \case
 >     Ctor c args -> do
->       case getBranch c terms of
->         Nothing -> throwError $ TypeError [PS "Non-exhastive patterns in", PT (Case e terms)]
->         Just (CaseTerm _ bs body) -> return $ substBindings (zip bs args) body
->     t -> return (Case t terms)
+>       case M.lookup c terms of
+>         Nothing -> throwError $ TypeError [PS "Non-exhastive patterns in", PT (Case e m' terms)]
+>         Just (CaseTerm bs body) -> return $ substBindings (zip bs args) body
+>     t -> return (Case t m' terms)
 
 A constructor can be eta-expanded, resulting in a lambda surrounding a
 fully applied 'Ctor'.
@@ -205,13 +206,8 @@ Any other term is already in whnf.
 
 Substitute a list of bindings into an expression.
 
-> substBindings :: [(Binding, Term)] -> Term -> Term
-> substBindings xs body = foldr (\((v,_),val) term -> subst v val term) body xs
-
-Select the branch of a case expression matching the given constructor.
-
-> getBranch :: Constructor -> [CaseTerm] -> Maybe CaseTerm
-> getBranch c = listToMaybe . filter (\(CaseTerm c' _ _) -> c == c')
+> substBindings :: [(Name, Term)] -> Term -> Term
+> substBindings xs body = foldr (\(v,val) term -> subst v val term) body xs
 
 Convert a type to whnf.
 

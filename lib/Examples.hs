@@ -5,6 +5,7 @@ import Types
 import TypeCheck
 
 import Control.Monad.Reader hiding (void)
+import Data.Map (singleton, fromList, empty)
 
 defaultCtx :: Either TypeError Context
 defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
@@ -57,14 +58,14 @@ bool :: DataDecl
 bool = DataDecl
   (Specified "Bool")
   (Ty 0)
-  ([ (Specified "False", Var (Specified "Bool"))
-   , (Specified "True", Var (Specified "Bool"))])
+  (fromList [ (Specified "False", Var (Specified "Bool"))
+            , (Specified "True", Var (Specified "Bool"))])
 
 not' :: Term
 not' = Lam (var "b", v "Bool") $
-     Case (v "b")
-      [ CaseTerm (var "True") [] (Ctor (var "False") [])
-      , CaseTerm (var "False") [] (Ctor (var "True") [])]
+     Case (v "b") (v "Bool") $
+      fromList [ (var "True", CaseTerm [] (v "False"))
+               , (var "False", CaseTerm [] (Ctor (var "True") []))]
 
 boolId :: Term
 boolId = Lam (var "x", Var (Specified "Bool")) (v "x")
@@ -73,10 +74,10 @@ nat :: DataDecl
 nat = DataDecl
   (Specified "Nat")
   (Ty 0)
-  ([(Specified "Zero", Var (Specified "Nat"))
-    ,(Specified "Succ",
-       Pi (Specified "x",Var (Specified "Nat"))
-         (Var (Specified "Nat")))])
+  (fromList [(Specified "Zero", Var (Specified "Nat"))
+            ,(Specified "Succ",
+              Pi (Specified "x",Var (Specified "Nat"))
+              (Var (Specified "Nat")))])
 
 natId :: Term
 natId = Lam (var "x", natT) (v "x")
@@ -95,15 +96,16 @@ list = DataDecl
   (Specified "List")
   (Pi (Specified "a", (Ty 0)) (Ty 0))
   -- Nil : List a
-  ([(Specified "Nil",
-     Pi (Specified "a", (Ty 0)) $
+  (fromList
+   [(Specified "Nil",
+      Pi (Specified "a", (Ty 0)) $
       App (Var (Specified "List")) (Var (Specified "a")))
-  -- Cons : (a:(Ty 0)) -> (x:a) -> (xs:List a) -> List a
-  ,(Specified "Cons",
-     Pi (Specified "a",(Ty 0)) $
+    -- Cons : (a:(Ty 0)) -> (x:a) -> (xs:List a) -> List a
+   ,(Specified "Cons",
+      Pi (Specified "a",(Ty 0)) $
       Pi (Specified "x",Var (Specified "a")) $
-       Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
-        App (Var (Specified "List")) (Var (Specified "a")))])
+      Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
+      App (Var (Specified "List")) (Var (Specified "a")))])
 
 listT = v "List"
 nil = v "Nil"
@@ -114,16 +116,17 @@ vect = DataDecl
   (Specified "Vect")
   (Pi (Specified "n", Var (Specified "Nat")) (Pi (Specified "a", (Ty 0)) (Ty 0)))
   -- VNil : Vect 0 a
-  ([(Specified "VNil",
+  (fromList
+   [(Specified "VNil",
      Pi (Specified "a", (Ty 0)) $
       (Var (Specified "Vect")) `App` (Var (Specified "Zero")) `App` (Var (Specified "a")))
   -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect n a) -> Vect (S n) a
    ,(Specified "VCons",
       Pi (Specified "a",(Ty 0)) $
-       Pi (Specified "n",(Var (Specified "Nat"))) $
-        Pi (Specified "x",Var (Specified "a")) $
-         Pi (Specified "xs",(Var (Specified "Vect")) `App` (Var (Specified "n")) `App` (Var (Specified "a"))) $
-          (Var (Specified "Vect")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))) `App` (Var (Specified "a")))])
+      Pi (Specified "n",(Var (Specified "Nat"))) $
+      Pi (Specified "x",Var (Specified "a")) $
+      Pi (Specified "xs",(Var (Specified "Vect")) `App` (Var (Specified "n")) `App` (Var (Specified "a"))) $
+      (Var (Specified "Vect")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))) `App` (Var (Specified "a")))])
 
 vectT = v "Vect"
 vnil = v "VNil"
@@ -141,15 +144,17 @@ three = succT `App` succT `App` succT `App` zeroT
 patternMatchNat :: Term
 patternMatchNat
   = Lam (var "n", natT) $
-     Case (v "n")
-      [CaseTerm (var "Zero") [] (succ' zero)
-      ,CaseTerm (var "Succ") [(var "n", natT)] zero]
+     Case (v "n") natT $
+      fromList
+      [(var "Zero", CaseTerm  [] (succ' zero))
+      ,(var "Succ", CaseTerm  [var "n"] zero)
+      ]
 
 void :: DataDecl
 void = DataDecl
   (Specified "Void")
   (Ty 0)
-  []
+  empty
 
 sigma :: DataDecl
 sigma = DataDecl
@@ -157,26 +162,27 @@ sigma = DataDecl
   ((var "a", (Ty 0))
     --> (var "b", (var "x", v "a") --> (Ty 0))
     --> (Ty 0))
-  [(var "MkSigma",
+  $ singleton (var "MkSigma") $
      (var "a", (Ty 0))
      --> (var "b", (var "ignored", v "a") --> (Ty 0))
      --> (var "x", v "a")
      --> (var "ignored2", (v "b" `App` v "x"))
      --> (v "Sigma" `App` v "a" `App` v "b")
-   )]
 
 plus :: Definition
 plus = Definition (Specified "plus") (Pi (var "n", natT) $ Pi (var "m", natT) $ natT)
   (Lam (var "n", natT) $ Lam (var "m", natT) $
-   Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
-                , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
-                ])
+   Case (v "n") (v "Nat") $
+   fromList [ (var "Zero", CaseTerm  [] (v "m"))
+            , (var "Succ", CaseTerm  [var "n'"] (v "plus" `App` v "n" `App` v "m"))
+            ])
 
 plusTerm :: Term
 plusTerm = (Lam (var "n", natT) $ Lam (var "m", natT) $
-   Case (v "n") [ CaseTerm (var "Zero") [] (v "m")
-                , CaseTerm (var "Succ") [(var "n'", natT)] (v "plus" `App` v "n" `App` v "m")
-                ])
+   Case (v "n") (v "Nat") $
+   fromList [ (var "Zero", CaseTerm  [] (v "m"))
+            , (var "Succ", CaseTerm  [var "n'"] (v "plus" `App` v "n" `App` v "m"))
+            ])
 
 k :: Term
 k = Lam (var "a", natT) (Lam (var "b", natT) (v "a"))

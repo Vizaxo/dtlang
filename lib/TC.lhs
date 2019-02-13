@@ -9,6 +9,7 @@
 > import Control.Monad.State
 > import Data.Either
 > import Data.Maybe
+> import qualified Data.Map as M
 
 The TC monad is where all type-checking is done.
 
@@ -49,6 +50,10 @@ The context can be extended with a new binding.
 
 > extendCtx :: Binding -> TC a -> TC a
 > extendCtx (n,v) = local (insertCtx n v)
+
+
+> extendCtxs :: [Binding] -> TC a -> TC a
+> extendCtxs = foldr (\b -> (extendCtx b .)) id
 
 We need a way to generate variables that are guaranteed to be fresh.
 
@@ -127,7 +132,7 @@ We start with an empty context.
 >   case listToMaybe $ catMaybes $ map findCtor ds of
 >     Nothing -> throwError $ TypeError [PS "No constructor named", PN c, PS "in context"]
 >     Just ty -> return ty
->   where findCtor (DataDecl _ _ ctors) = lookup c ctors
+>   where findCtor (DataDecl _ _ ctors) = M.lookup c ctors
 
 Run the TC monad, outputting all information. This is useful for debugging purposes.
 

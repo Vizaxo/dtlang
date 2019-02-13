@@ -9,7 +9,7 @@ import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 import Data.List
 import Data.Tuple
-import Data.Map (Map)
+import Data.Map (keys, assocs, Map)
 import Data.Maybe
 import qualified Data.Map as M
 
@@ -55,10 +55,10 @@ eraseTypes = cata alg where
   alg (PiF _ _) = EErasedType
   alg (AppF a b) = EApp a b
   alg (TyF n) = EErasedType
-  alg (CaseF e terms) = ECase e (eraseTypesCase <$> terms)
+  alg (CaseF e m terms) = ECase e (eraseTypesCase <$> assocs terms)
 
-  eraseTypesCase (CaseTerm ctor bindings e)
-    = ECaseTermF ctor (eraseTypesBinding <$> bindings) e
+  eraseTypesCase (ctor, (CaseTerm bindings e))
+    = ECaseTermF ctor bindings e
 
   eraseTypesBinding (name, ty) = name
 
@@ -190,8 +190,8 @@ getCtorTag c = do
     (listToMaybe $ catMaybes (ctorIndex <$> datas))
   where
     ctorIndex :: DataDecl -> Maybe Int
-    ctorIndex (DataDecl _ _ ((fst <$>) -> ctors))
-      = elemIndex c ctors
+    ctorIndex (DataDecl _ _ ctors)
+      = elemIndex c (keys ctors)
 
 
 data HighLevelAsmExpr
