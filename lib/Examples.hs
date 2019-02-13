@@ -17,6 +17,7 @@ defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
   typeCheckData list `bindCtx`
   typeCheckData vect `bindCtx`
   typeCheckData void `bindCtx`
+  typeCheckData unit `bindCtx`
   typeCheckData sigma
   where
     infixl 5 `bindCtx`
@@ -155,6 +156,12 @@ void = DataDecl
   (Specified "Void")
   (Ty 0)
   empty
+
+unit :: DataDecl
+unit = DataDecl
+  (Specified "Unit")
+  (Ty 0) $
+  singleton (var "MkUnit") (v "Unit")
 
 sigma :: DataDecl
 sigma = DataDecl

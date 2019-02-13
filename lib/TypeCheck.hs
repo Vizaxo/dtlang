@@ -38,7 +38,8 @@ typeCheck' (Lam (x, xTy) body) = do
   whnf (extract xTyAnn) >>= \case
     (Ty n) -> do
       bodyAnn <- extendCtx (x, xTy) (typeCheck' body)
-      pure $ Pi (x, xTy) (extract bodyAnn) :< LamF (x, xTyAnn) bodyAnn
+      bodyAnn' <- whnf (extract bodyAnn)
+      pure $ Pi (x, xTy) bodyAnn' :< LamF (x, xTyAnn) bodyAnn
     _ -> typeError
 typeCheck' (Pi (x, xTy) ret) = do
   xTyAnn <- typeCheck' xTy
@@ -55,29 +56,31 @@ typeCheck' (App a b) = do
     Pi (x, xTy) ret -> do
       bAnn <- typeCheck' b
       betaEq (extract bAnn) xTy
-      pure $ subst x b ret :< AppF aAnn bAnn
+      ret' <- whnf (subst x b ret)
+      pure $ ret' :< AppF aAnn bAnn
     _ -> typeError
 typeCheck' (Ty n) = pure $ Ty (n+1) :< TyF n
 typeCheck' (Case expr motive cases) = do
   exprAnn <- typeCheck' expr
   motiveAnn <- typeCheck' motive
   whnf (extract motiveAnn) >>= \case
-    Ty n -> pure ()
-    _ -> typeError
+    Pi _ _ -> pure ()
+    _ -> error "Motive is not a pi-type"
   dataname <- appData (extract exprAnn)
   datatype@(DataDecl name ty ctors) <- lookupData dataname
   casesAnn <- perfectMerge ctors cases undefined undefined tcCase
-  pure (extract motiveAnn :< CaseF exprAnn motiveAnn casesAnn)
+  retTy <- whnf (motive `App` expr)
+  pure (retTy :< CaseF exprAnn motiveAnn casesAnn)
     where
-      tcCase :: Type -> CaseTerm -> TC (CaseTermF (Cofree TermF Type))
-      tcCase args (CaseTerm bs e) = do
+      tcCase :: Constructor -> Type -> CaseTerm -> TC (CaseTermF (Cofree TermF Type))
+      tcCase ctor args (CaseTerm bs e) = do
         argTys <- extractArgs args
         --TODO: perfectZipWith
         when (length argTys /= length bs) (error "args not length bs")
         extendCtxs (zip bs argTys) $ do
           eTy <- typeCheck' e
           eTy' <- whnf (extract eTy)
-          betaEq eTy' =<< whnf motive
+          betaEq eTy' =<< whnf (motive `App` Ctor ctor (Var <$> bs))
           pure (CaseTerm bs eTy)
       -- TODO: match based on type (e.g. don't match VNil for Vect Zero a)
 
