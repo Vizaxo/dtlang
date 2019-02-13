@@ -190,7 +190,7 @@ appropriate branch.
 >     Ctor c args -> do
 >       case M.lookup c terms of
 >         Nothing -> throwError $ TypeError [PS "Non-exhastive patterns in", PT (Case e m' terms)]
->         Just (CaseTerm bs body) -> return $ substBindings (zip bs args) body
+>         Just (CaseTerm bs body) -> whnf $ substBindings (zip bs args) body
 >     t -> return (Case t m' terms)
 
 A constructor can be eta-expanded, resulting in a lambda surrounding a

@@ -79,10 +79,10 @@ extractBase (a :< f) = embed (extractBase <$> f)
 splitCofree :: Corecursive t => Cofree (Base t) a -> (t, a)
 splitCofree = extractBase &&& extract
 perfectMerge :: forall k a e m b c. (Ord k, MonadError e m)
-  => Map k a -> Map k b -> (k -> a -> e) -> (k -> b -> e) -> (a -> b -> m c) -> m (Map k c)
+  => Map k a -> Map k b -> (k -> a -> e) -> (k -> b -> e) -> (k -> a -> b -> m c) -> m (Map k c)
 perfectMerge x y xe ye f = mergeA (missing xe) (missing ye) matched x y where
     missing e = traverseMissing (throwError .: e)
-    matched = zipWithAMatched (\k x y -> f x y)
+    matched = zipWithAMatched (\k x y -> f k x y)
 
 fromListNoDups :: Ord k => ([(k, v)] -> e) -> [(k, v)] -> Either e (Map k v)
 fromListNoDups f kvs

@@ -17,6 +17,7 @@ defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
   typeCheckData list `bindCtx`
   typeCheckData vect `bindCtx`
   typeCheckData void `bindCtx`
+  typeCheckData unit `bindCtx`
   typeCheckData sigma
   where
     infixl 5 `bindCtx`
@@ -144,7 +145,7 @@ three = succT `App` succT `App` succT `App` zeroT
 patternMatchNat :: Term
 patternMatchNat
   = Lam (var "n", natT) $
-     Case (v "n") natT $
+     Case (v "n") (Lam (var "x", natT) natT) $
       fromList
       [(var "Zero", CaseTerm  [] (succ' zero))
       ,(var "Succ", CaseTerm  [var "n"] zero)
@@ -155,6 +156,12 @@ void = DataDecl
   (Specified "Void")
   (Ty 0)
   empty
+
+unit :: DataDecl
+unit = DataDecl
+  (Specified "Unit")
+  (Ty 0) $
+  singleton (var "MkUnit") (v "Unit")
 
 sigma :: DataDecl
 sigma = DataDecl
