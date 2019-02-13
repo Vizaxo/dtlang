@@ -35,6 +35,7 @@ executable dtlang-compiler
                      , text
                      , process
                      , directory
+                     , comonad
 
 library
   hs-source-dirs:      lib

@@ -1,5 +1,8 @@
 module Utils where
 
+import Control.Arrow
+import Control.Comonad
+import Control.Comonad.Cofree
 import Control.Monad.Except
 import Data.Functor.Foldable
 import Data.Map (Map, fromList)

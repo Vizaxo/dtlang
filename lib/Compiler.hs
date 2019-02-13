@@ -1,28 +1,24 @@
 module Compiler where
 
+import Control.Comonad.Cofree (Cofree)
+import Control.Comonad.Trans.Cofree (CofreeF ((:<)))
+import Control.Lens hiding (Context, (:<))
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
-import Control.Monad.Reader
-import Control.Lens hiding (Context)
+import Data.Either
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 import Data.List
-import Data.Tuple
 import Data.Map (keys, assocs, Map)
-import Data.Maybe
 import qualified Data.Map as M
+import Data.Maybe
+import Data.Tuple
 
-import Equality
 import Types
+import TC
 import Utils
-
-
-partiallyApplyCtors :: forall m. MonadReader Context m => Term -> m Term
-partiallyApplyCtors = cataM alg where
-  alg :: TermF Term -> m Term
-  alg (VarF v) = partiallyApplyCtor v
-  alg t = pure (embed t)
 
 
 data ErasedCaseTermF r = ECaseTermF
@@ -46,21 +42,40 @@ makeBaseFunctor ''ErasedTerm
 
 -- | Erase types ready for compilation
 -- TODO: also erase lambdas where the argument is a type
-eraseTypes :: Term -> ErasedTerm
+eraseTypes :: Cofree TermF Type -> ErasedTerm
 eraseTypes = cata alg where
-  alg :: TermF ErasedTerm -> ErasedTerm
-  alg (VarF n) = EVar n
-  alg (CtorF ctor rs) = ECtor ctor rs
-  alg (LamF var body) = ELam (eraseTypesBinding var) body
-  alg (PiF _ _) = EErasedType
-  alg (AppF a b) = EApp a b
-  alg (TyF n) = EErasedType
-  alg (CaseF e m terms) = ECase e (eraseTypesCase <$> assocs terms)
+  alg (Ty _ :< _) =  EErasedType
+  alg (_ :< VarF n) =  EVar n
+  alg (_ :< CtorF ctor rs) =  ECtor ctor rs
+  alg (_ :< LamF var body) =  ELam (eraseTypesBinding var) body
+  alg (_ :< PiF _ _) = EErasedType
+  alg (_ :< AppF a b) = EApp a b
+  alg (_ :< TyF n) = EErasedType
+  alg (_ :< CaseF e _ terms) =  ECase e (eraseTypesCase <$> assocs terms)
 
   eraseTypesCase (ctor, (CaseTerm bindings e))
     = ECaseTermF ctor bindings e
 
   eraseTypesBinding (name, ty) = name
+
+
+partiallyApplyCtors :: forall m. MonadReader Context m => ErasedTerm -> m ErasedTerm
+partiallyApplyCtors = cataM alg where
+  alg (EVarF v) = partiallyApplyCtorE v
+  alg t = pure (embed t)
+
+partiallyApplyCtorE :: MonadReader Context m => Name -> m ErasedTerm
+partiallyApplyCtorE v = do
+  lookupEnv v <$> ask >>= \case
+    Just t -> pure $ EVar v
+    Nothing ->
+      fromRight (EVar v) <$> runExceptT (partiallyApplyCtor' [] <$> lookupCtor v)
+  where
+    partiallyApplyCtor' args (Pi (x,ty) ret)
+      = ELam x (partiallyApplyCtor' (EVar x:args) ret)
+    partiallyApplyCtor' args _
+      = ECtor v args
+
 
 
 data FunctionName = FunctionName Name
@@ -432,8 +447,8 @@ data CompilerError
   = CTDError TaggedDataError
   deriving Show
 
-compileToC :: MonadError CompilerError m => Context -> Term -> m String
+compileToC :: MonadError CompilerError m => Context -> Cofree TermF Type -> m String
 compileToC ctx = flip evalStateT (GenVar 0) . flip runReaderT ctx
   . (toC <=< toHLA <=< (withError CTDError . toTaggedData)
-     <=< lambdaLift <=< fmap eraseTypes)
-  . partiallyApplyCtors
+     <=< lambdaLift <=< partiallyApplyCtors)
+  . eraseTypes

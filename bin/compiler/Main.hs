@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Comonad
 import qualified Data.Text as T
 import System.Directory
 import System.Environment
@@ -22,13 +23,15 @@ main = getArgs >>= \case
       \e -> putStrLn "Error type checking default context:" >> print e >> exitFailure
     term <- handleErrM (parseTerm (T.pack src)) $
       \e -> putStrLn "Error parsing file:" >> print e >> exitFailure
-    case runTC ctx (typeCheck term) of
+    termAnn <- case runTC ctx (typeCheck' term) of
       Left e ->
         putStrLn "Error type checking term:" >> print e >> exitFailure
-      Right ty -> putStrLn $ "Term had type " <> show ty
-    cSrc <- handleErrM (compileToC ctx term) $
+      Right termAnn -> do
+        putStrLn $ "Term had type " <> show (extract termAnn)
+        pure termAnn
+    cSrc <- handleErrM (compileToC ctx termAnn) $
         \e -> putStrLn "Error type checking term:" >> print e >> exitFailure
     cSrcFile <- writeSystemTempFile ("dtlang-" <> outfile <> ".c") cSrc
     workingDir <- getCurrentDirectory
-    exitWith =<< system ("gcc -I" <> workingDir <> " '" <> cSrcFile <> "' -o '" <> outfile <> "'")
+    exitWith =<< system ("gcc -ggdb -I" <> workingDir <> " '" <> cSrcFile <> "' -o '" <> outfile <> "'")
   _ -> getProgName >>= \p -> putStrLn $ "Usage: " <> p <> " srcfile.dtlang -o outfile"
