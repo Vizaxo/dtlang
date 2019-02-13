@@ -3,11 +3,12 @@ module Parser where
 
 import Lexer as L
 import Sexp
-import Types hiding (Node)
+import Types hiding (Node, name)
 import qualified Types as T
+import Utils
 
 import Prelude hiding (pi)
-import Data.Text hiding (map)
+import Data.Text hiding (map, length)
 import Text.Parsec hiding ((<|>), ParseError)
 import qualified Text.Parsec as Parsec
 
@@ -24,10 +25,12 @@ data ParseError
   | PEApp TokenTree
   | PETypeUniv TokenTree
   | PECase TokenTree
-  | PE TokenTree
+  | PECaseDupCtors [(Name, CaseTerm)]
   | PECaseTerm TokenTree
+  | PEName TokenTree
   | PEDefinition TokenTree
   | PEData TokenTree
+  | PEDataDupCtors [(Name, Term)]
   | PEConstructor TokenTree
   deriving Show
 
@@ -62,13 +65,19 @@ typeUniv (SexpTree [Node Type, Node (Number n)]) | n >= 0 = Right (Ty (fromInteg
 typeUniv t = Left $ PETypeUniv t
 
 case' :: TokenTree -> Either ParseError Term
-case' (SexpTree (Node L.Case:e:cs)) = T.Case <$> term e <*> sequence (map caseTerm cs)
+case' (SexpTree (Node L.Case:e:m:cs))
+  = T.Case <$> term e <*> term m
+  <*> (fromListNoDups PECaseDupCtors =<< traverse caseTerm cs)
 case' t = Left $ PECase t
 
-caseTerm :: TokenTree -> Either ParseError CaseTerm
+caseTerm :: TokenTree -> Either ParseError (Constructor, CaseTerm)
 caseTerm (SexpTree [SexpTree (Node (Identifier ctor):vars), body]) =
-  CaseTerm (Specified ctor) <$> sequence (map binding vars) <*> term body
+  (Specified ctor,) <$> (CaseTerm  <$> traverse name vars <*> term body)
 caseTerm t = Left $ PECaseTerm t
+
+name :: TokenTree -> Either ParseError Name
+name (Node (Identifier n)) = pure (Specified n)
+name t = Left $ PEName t
 
 definition :: TokenTree -> Either ParseError Definition
 definition (SexpTree [Node Define, Node (Identifier name), ty, body]) =
@@ -77,7 +86,8 @@ definition t = Left $ PEDefinition t
 
 data' :: TokenTree -> Either ParseError DataDecl
 data' (SexpTree (Node Data : Node (Identifier name) : ty : ctors)) =
-  DataDecl (Specified name) <$> term ty <*> sequence (map constructor ctors)
+  DataDecl (Specified name) <$> term ty
+  <*> (fromListNoDups PEDataDupCtors =<< traverse constructor ctors)
 data' t = Left $ PEData t
 
 constructor :: TokenTree -> Either ParseError (Constructor, Type)
@@ -91,7 +101,7 @@ infixl 5 <||>
 (Right a) <||> b = Right a
 
 term :: TokenTree -> Either ParseError Term
-term t = lambda t <||> pi t <||> app t <||> typeUniv t <||> var t <||> case' t 
+term t = lambda t <||> pi t <||> app t <||> typeUniv t <||> var t <||> case' t
 
 topLevel :: TokenTree -> Either ParseError TopLevel
 topLevel t = (TLData <$> data' t) <||> (TLDef <$> definition t)

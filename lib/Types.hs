@@ -1,7 +1,10 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Types where
 
 import Data.Functor.Foldable.TH
+import Data.Map
 import Data.Natural
+import Text.Show.Deriving
 
 -- | A program is a list of top-level definitions and data declarations
 type Program = [TopLevel]
@@ -15,7 +18,7 @@ data TopLevel
 data DataDecl = DataDecl
   { name :: Name                          -- ^Datatype name
   , ty :: Type                            -- ^Type of the datatype
-  , constructors :: [(Constructor, Type)] -- ^Constructor declarations
+  , constructors :: Map Constructor Type -- ^Constructor declarations
   }
 
 -- | A constructor is a name.
@@ -35,8 +38,7 @@ data BTree a = Node (BTree a) (BTree a) | Leaf a
   deriving (Eq, Show, Functor, Foldable)
 
 data CaseTermF r = CaseTerm
-  { ctConstructor :: Constructor
-  , ctBindings :: [BindingF r]
+  { ctBindings :: [Name]
   , ctExpression :: r
   }
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -67,7 +69,7 @@ data Term
   | Pi (BindingF Term) Term    -- ^Pi var return
   | App Term Term              -- ^Application
   | Ty Natural                 -- ^Type universes
-  | Case Term [CaseTermF Term] -- ^Case expr of terms
+  | Case Term Type (Map Constructor CaseTerm)  -- ^Case expr, at type, of terms
   deriving (Eq, Show)
 makeBaseFunctor ''Term
 
@@ -99,3 +101,8 @@ deriving instance Show Context
 
 deriving instance Eq DataDecl
 deriving instance Show DataDecl
+
+deriving instance Show a => Show (TermF a)
+
+deriveShow1 ''CaseTermF
+deriveShow1 ''TermF

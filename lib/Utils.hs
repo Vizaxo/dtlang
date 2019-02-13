@@ -2,6 +2,8 @@ module Utils where
 
 import Control.Monad.Except
 import Data.Functor.Foldable
+import Data.Map (Map, fromList)
+import Data.Map.Merge.Lazy
 import Data.List
 import Debug.Trace
 
@@ -66,3 +68,22 @@ withError f ma = do
 handleErrM :: Applicative m => Either a b -> (a -> m b) -> m b
 handleErrM (Left x) f = f x
 handleErrM (Right y) f = pure y
+
+
+extractBase :: Corecursive t => Cofree (Base t) a -> t
+extractBase (a :< f) = embed (extractBase <$> f)
+
+splitCofree :: Corecursive t => Cofree (Base t) a -> (t, a)
+splitCofree = extractBase &&& extract
+perfectMerge :: forall k a e m b c. (Ord k, MonadError e m)
+  => Map k a -> Map k b -> (k -> a -> e) -> (k -> b -> e) -> (a -> b -> m c) -> m (Map k c)
+perfectMerge x y xe ye f = mergeA (missing xe) (missing ye) matched x y where
+    missing e = traverseMissing (throwError .: e)
+    matched = zipWithAMatched (\k x y -> f x y)
+
+fromListNoDups :: Ord k => ([(k, v)] -> e) -> [(k, v)] -> Either e (Map k v)
+fromListNoDups f kvs
+  | length (nub ks) == length ks = pure (fromList kvs)
+  | otherwise = Left (f kvs)
+  where
+    ks = fst <$> kvs

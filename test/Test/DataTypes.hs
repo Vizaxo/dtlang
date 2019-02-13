@@ -7,17 +7,8 @@ import Types
 import TypeCheck
 
 import Data.Either
+import Data.Map (singleton, fromList)
 import Test.Tasty.HUnit
-
-test_dupConstructorsDisallowed = assertLeft $ defaultCtx >>= flip runTC (typeCheckData dupConstructors)
-
-dupConstructors :: DataDecl
-dupConstructors =
-  DataDecl
-  (Specified "data")
-  (Ty 0)
-  ([(Specified "dupConstructor", Var (Specified "data"))
-   ,(Specified "dupConstructor", Var (Specified "data"))])
 
 test_constructorNotReturnDataDisallowed = assertLeft $ runTC emptyCtx $ typeCheckData badConstructorType
 
@@ -26,7 +17,7 @@ badConstructorType =
   DataDecl
   (Specified "data")
   (Ty 0)
-  ([(Specified "invalidTypeConstructor", (Ty 0))])
+  (singleton (Specified "invalidTypeConstructor") (Ty 0))
 
 badVarReference :: DataDecl
 badVarReference =
@@ -34,7 +25,8 @@ badVarReference =
   (Specified "Vect")
   (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0)))
    -- VNil : Vect 0 a
-  ([(Specified "VNil",
+  (fromList
+   [(Specified "VNil",
       Pi (Specified "a", (Ty 0)) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
    -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
@@ -56,7 +48,8 @@ badVarReferenceOtherCtor =
   (Specified "Vect")
   (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0)))
    -- VNil : Vect 0 a
-  ([(Specified "VNil",
+  (fromList
+   [(Specified "VNil",
       Pi (Specified "a", (Ty 0)) $
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))
    -- VCons : (a:(Ty 0)) -> (x:a) -> (n:Nat) -> (xs:Vect a n) -> Vect a (S n)
@@ -70,7 +63,8 @@ badVarReferenceOtherCtorRev =
   DataDecl
   (Specified "Vect")
   (Pi (Specified "a", (Ty 0)) (Pi (Specified "n", Var (Specified "Nat")) (Ty 0)))
-  ([(Specified "VCons",
+  (fromList
+   [(Specified "VCons",
       Pi (Specified "x",Var (Specified "a")) $
        Pi (Specified "xs",App (Var (Specified "List")) (Var (Specified "a"))) $
         (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` ((Var (Specified "Succ")) `App` (Var (Specified "n"))))
@@ -116,6 +110,7 @@ assertRight (Left e) = assertFailure $ "Expected a right; got Left " <> show e
 assertRight _ = return ()
 assertAlphaEq a b
   = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b)  (isAlphaEq emptyCtx a b)
+
 assertRightAlphaEq (Right a) b = assertBool ("Terms are not alpha equal:\n" <> show a <> "\n" <> show b) (isAlphaEq emptyCtx a b)
 assertRightAlphaEq _ _ = assertFailure "Terms are not both Right"
 
@@ -125,7 +120,8 @@ badSigmas = [
   (Specified "Sigma")
   ((var "a", (Ty 0))
     --> (var "b", (var "x", v "a") --> (Ty 0))
-    --> (Ty 0))
+    --> (Ty 0)) $
+  fromList
   [(var "MkSigma",
      (var "a", (Ty 0))
      --> (var "b", (var "ignored", v "a") --> (Ty 0))
@@ -136,7 +132,8 @@ badSigmas = [
   (Specified "Sigma")
   ((var "a", (Ty 0))
     --> (var "b", (var "x", v "a") --> (Ty 0))
-    --> (Ty 0))
+    --> (Ty 0)) $
+  fromList
   [(var "MkSigma",
      (var "a", (Ty 0))
      --> (var "b", (var "ignored", v "a") --> (Ty 0))
@@ -148,7 +145,8 @@ badSigmas = [
   (
     (var "a", (Ty 0))
     --> (var "b", (var "x", v "a") --> (Ty 0))
-    --> (Ty 0))
+    --> (Ty 0)) $
+  fromList
   [(var "MkSigma",
      (var "a", (Ty 0))
      --> (var "b", (var "ignored", v "a") --> (Ty 0))
@@ -166,8 +164,8 @@ goodBadCtxData = DataDecl
   (
     (var "bad0", (Ty 0))
     --> (var "bad1", (var "bad2", v "bad0") --> (Ty 0))
-    --> (Ty 0))
-  [(var "Good1",
+    --> (Ty 0)) $
+  fromList [(var "Good1",
      (var "bad3", (Ty 0))
      --> (var "bad4", (var "bad5", v "bad3") --> (Ty 0))
      --> (var "bad6", v "bad3")
@@ -194,9 +192,9 @@ test_contextProperlyFilledData
       getEnv = [], datatypes = [DataDecl {name = Specified "Good0", ty
       = Pi (Specified "bad0",Ty 0) (Pi (Specified "bad1",Pi (Specified
       "bad2",Var (Specified "bad0")) (Ty 0)) (Ty 0)), constructors =
-      [(Specified "Good1",Pi (Specified "bad3",Ty 0) (Pi (Specified
-      "bad4",Pi (Specified "bad5",Var (Specified "bad3")) (Ty 0)) (Pi
-      (Specified "bad6",Var (Specified "bad3")) (Pi (Specified
-      "bad7",App (Var (Specified "bad4")) (Var (Specified "bad6")))
-      (App (App (Var (Specified "Good0")) (Var (Specified "bad3")))
-      (Var (Specified "bad4")))))))]}]})
+      fromList [(Specified "Good1",Pi (Specified "bad3",Ty 0) (Pi
+      (Specified "bad4",Pi (Specified "bad5",Var (Specified "bad3"))
+      (Ty 0)) (Pi (Specified "bad6",Var (Specified "bad3")) (Pi
+      (Specified "bad7",App (Var (Specified "bad4")) (Var (Specified
+      "bad6"))) (App (App (Var (Specified "Good0")) (Var (Specified
+      "bad3"))) (Var (Specified "bad4")))))))]}]})

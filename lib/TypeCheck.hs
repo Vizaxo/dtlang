@@ -6,70 +6,91 @@ import Term
 import Types
 import Utils
 
-import Control.Lens hiding (Context)
+import Control.Comonad
+import Control.Comonad.Cofree
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.List
+import Data.Functor.Foldable
+import Data.Map (traverseWithKey)
 
 -- | Predicate of whether a given term is well-typed in the given context.
 wellTyped :: Context -> Term -> Bool
 wellTyped ctx = succeeded ctx . typeCheck
 
--- | Check the type of a term in the given context. Returns the type
--- if the term is well-typed, and gives an error otherwise.
+type TypeF = TermF
+
 typeCheck :: Term -> TC Type
-typeCheck (Var v) = fromCtx v
-typeCheck (Ctor c args) = do
+typeCheck = fmap extract . typeCheck'
+
+--TODO: rework errors completely
+typeError :: TC a
+typeError = throwError (TypeError [])
+
+typeCheck' :: Term -> TC (Cofree TermF Type)
+typeCheck' (Var v) = (:<) <$> fromCtx v <*> pure (VarF v)
+typeCheck' (Ctor c args) = do
   ty <- lookupCtor c
-  tcArgList ty args
-typeCheck (Lam (x,xTy) body) = do
-  typeCheck xTy >>= whnf >>= \case
-    (Ty n) -> Pi (x,xTy) <$> extendCtx (x,xTy) (typeCheck body)
-    t  -> throwError $ TypeError [PS "Expected type (Ty n), got type", PT t]
-typeCheck (Pi (x,xTy) ret) = do
-  typeCheck xTy >>= whnf >>= \case
+  t <- tcArgList ty args
+  args' <- mapM typeCheck' args
+  pure (t :< CtorF c args')
+typeCheck' (Lam (x, xTy) body) = do
+  xTyAnn <- typeCheck' xTy
+  whnf (extract xTyAnn) >>= \case
     (Ty n) -> do
-      extendCtx (x,xTy) (typeCheck ret) >>= whnf >>= \case
-        (Ty m) -> return (Ty (max n m))
-        t  -> throwError $ TypeError
-          [PS "Expected a (Ty n), got type", PT t]
-    t -> throwError $ TypeError [PS "Expected a (Ty n), got type ", PT t]
-typeCheck (App a b) =
-  typeCheck a >>= whnf >>= \case
-    Pi (x,xTy) ret -> do
-      bTy <- typeCheck b
-      extendTypeError (betaEq bTy xTy) [PS "When type-checking", PT (App a b)]
-      return (subst x b ret)
-    t -> throwError $ TypeError [PS "Trying to apply a non-function type in the term", PT (App t b)]
-typeCheck (Ty n) = return (Ty (n+1))
-typeCheck (Case e xs) = do
-  t <- typeCheck e
-  dataname <- appData t
+      bodyAnn <- extendCtx (x, xTy) (typeCheck' body)
+      pure $ Pi (x, xTy) (extract bodyAnn) :< LamF (x, xTyAnn) bodyAnn
+    _ -> typeError
+typeCheck' (Pi (x, xTy) ret) = do
+  xTyAnn <- typeCheck' xTy
+  whnf (extract xTyAnn) >>= \case
+    Ty n -> do
+      retAnn <- extendCtx (x, xTy) (typeCheck' ret)
+      whnf (extract retAnn) >>= \case
+        Ty m -> pure $ Ty (max n m) :< PiF (x, xTyAnn) retAnn
+        _ -> typeError
+    _ -> typeError
+typeCheck' (App a b) = do
+  aAnn <- typeCheck' a
+  whnf (extract aAnn) >>= \case
+    Pi (x, xTy) ret -> do
+      bAnn <- typeCheck' b
+      betaEq (extract bAnn) xTy
+      pure $ subst x b ret :< AppF aAnn bAnn
+    _ -> typeError
+typeCheck' (Ty n) = pure $ Ty (n+1) :< TyF n
+typeCheck' (Case expr motive cases) = do
+  exprAnn <- typeCheck' expr
+  motiveAnn <- typeCheck' motive
+  whnf (extract motiveAnn) >>= \case
+    Ty n -> pure ()
+    _ -> typeError
+  dataname <- appData (extract exprAnn)
   datatype@(DataDecl name ty ctors) <- lookupData dataname
-  --TODO: use sets instead of lists
-  let datactors = sortOn fst ctors
-  let casectors = sortOn ctConstructor xs
-  caseTys <- zipWithM (tcCase datatype) datactors casectors
-  adjacentsSatisfyM betaEq caseTys
-  --TODO: work out what to do with dependently-tyepd case expressions
-  case caseTys of
-    -- We need type inference to know what type to make an empty case
-    [] -> throwError $ TypeError [PS "Empty cases are not yet supported"]
-    (x:_) -> whnf x
+  casesAnn <- perfectMerge ctors cases undefined undefined tcCase
+  pure (extract motiveAnn :< CaseF exprAnn motiveAnn casesAnn)
+    where
+      tcCase :: Type -> CaseTerm -> TC (CaseTermF (Cofree TermF Type))
+      tcCase args (CaseTerm bs e) = do
+        argTys <- extractArgs args
+        --TODO: perfectZipWith
+        when (length argTys /= length bs) (error "args not length bs")
+        extendCtxs (zip bs argTys) $ do
+          eTy <- typeCheck' e
+          eTy' <- whnf (extract eTy)
+          betaEq eTy' =<< whnf motive
+          pure (CaseTerm bs eTy)
+      -- TODO: match based on type (e.g. don't match VNil for Vect Zero a)
 
-  where
-    --TODO: match based on type (e.g. don't match VNil for Vect Zero a)
-    tcCase datatype (ctora, ty) (CaseTerm ctorb bindings expr)
-      | ctora /= ctorb = throwError $ TypeError [PS "Constructors for datatype", PD datatype, PS "not matched by case expression", PT (Case e xs)]
-      | otherwise = do
-          ty' <- whnf ty
-          bindings' <- mapM (traverseOf _2 whnf) bindings
-          tcArgListTys ty' (snd <$> bindings')
-          foldl (flip extendCtx) (typeCheck expr) bindings'
+      extractArgs :: Type -> TC [Type]
+      extractArgs = histo alg where
+        alg :: TermF (Cofree TermF (TC [Type])) -> TC [Type]
+        alg (PiF (x, xTy) ret) = do
+          xTy' <- whnf (extractBase xTy)
+          ret' <- extendCtx (x, xTy') (extract ret)
+          pure (xTy':ret')
+        alg _ = pure []
 
--- | Check that a list of arguments could be applied to a term with a
--- given Pi type, and return the value that would be returned as a
--- result of this application.
+--TODO: rewrite this in terms of extractArgs
 tcArgList (Pi (x, xTy) ret) (yTy:bs) = do
   --TODO: better type errors
   yTy `hasType` xTy
@@ -77,14 +98,6 @@ tcArgList (Pi (x, xTy) ret) (yTy:bs) = do
 tcArgList ty [] = do
   return ty
 tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
-
-tcArgListTys (Pi (x, xTy) ret) (yTy:bs) = do
-  --TODO: better type errors
-  xTy `betaEq` yTy
-  extendCtx (x,xTy) $ tcArgListTys ret bs
-tcArgListTys ty [] = do
-  return ty
-tcArgListTys _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
 
 typeCheckTopLevel :: TopLevel -> TC Context
 typeCheckTopLevel (TLData d) = typeCheckData d
@@ -102,15 +115,13 @@ typeCheckData d@(DataDecl name ty cs) = do
   ask >>= \ctx -> nameNotDefined ctx name
   isType ty
   local (insertCtx name ty) $ do
-    bs <- mapM typeCheckC cs
+    bs <- traverseWithKey typeCheckC cs
     ctx <- ask
     mapM_ (nameNotDefined ctx) (fst <$> bs)
-    when (hasDuplicates (fst <$> bs))
-      (throwError $ TypeError [PS "Duplicate constructors in", PN name])
     return (insertDataDecl d $ foldr (\(n,t) -> insertCtx n t) ctx bs)
 
   where
-    typeCheckC (c, cTy) = do
+    typeCheckC c cTy = do
       isType cTy
       cTy' <- whnf cTy
       returnsData name cTy'
@@ -165,12 +176,6 @@ isType t = do
     (Ty n) -> return ()
     term -> throwError $ TypeError
       [PS "Expected a type, got", PT t, PS ":", PT term]
-
--- | Helper function to type-check a single let binding.
-typeCheckBinding ((x,xTy),val) = do
-  ty <- typeCheck val
-  isType xTy
-  betaEq xTy ty
 
 -- | Type-check a term and insert it into the context.
 checkAndInsert :: Name -> Term -> TC Context

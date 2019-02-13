@@ -5,6 +5,7 @@ import Utils
 
 import Data.Functor.Foldable
 import Data.List
+import Data.Map (elems)
 
 -- | Get the maximum nesting level of a term.
 maxNesting :: Term -> Int
@@ -17,10 +18,9 @@ maxNesting = cata alg
     alg (PiF (_,b) t) = max b (t + 1)
     alg (AppF a b) = max a b + 1
     alg (TyF _) = 0
-    alg (CaseF t branches) = max t (caseNesting branches)
+    alg (CaseF t m branches) = t `max` m `max` caseNesting branches
 
-    caseNesting :: [CaseTermF Int] -> Int
-    caseNesting = maximumOr 0 . fmap (\(CaseTerm _ bs e) -> max (bindNesting bs) e)
+    caseNesting = maximumOr 0 . fmap ctExpression . elems
 
     bindNesting :: [BindingF Int] -> Int
     bindNesting = maximumOr 0 . fmap snd
@@ -66,7 +66,8 @@ prettyPrint = cata alg where
   alg (PiF (u,uTy) ret) = show u <> ":" <> uTy <> " -> (" <> ret <> ")"
   alg (AppF a b) = "(" <> a <> ") (" <> b <> ")"
   alg (TyF n) = "(Type " <> show n <> ")"
-  alg (CaseF t terms) = "(case " <> show t <> " of " <> show terms <> ")"
+  alg (CaseF t m terms) = "(case " <> show t
+    <> " motive " <> show m <> " of " <> show terms <> ")"
 
 -- | Get a list of all the bound and free variables in a term.
 allVars :: Term -> [Name]
@@ -81,11 +82,9 @@ freeVars = cata alg where
   alg (PiF (v,a) ret) = nub (ret <> a) \\ [v]
   alg (AppF a b) = nub $ a <> b
   alg (TyF _) = []
-  alg (CaseF t cs) = nub $ t <> concatMap caseTermFrees cs
+  alg (CaseF t m cs) = nub $ t <> m <> concatMap caseTermFrees cs
 
-  caseTermFrees (CaseTerm _ bs e) = nub (concatMap bindingFrees bs <> e) \\ (fst <$> bs)
-
-  bindingFrees (v, t) = t \\ [v]
+  caseTermFrees (CaseTerm bs e) = nub $ e \\ bs
 
 -- | Get a list of all the bound variables in a term.
 boundVars :: Term -> [Name]
@@ -96,8 +95,8 @@ boundVars = cata alg where
   alg (PiF (v,_) ret) = v:ret
   alg (AppF a b) = a <> b
   alg (TyF _) = []
-  alg (CaseF t cs) = t <> concatMap caseTermBounds cs
+  alg (CaseF t m cs) = t <> m <> concatMap caseTermBounds cs
 
-  caseTermBounds (CaseTerm _ bs t) = concatMap bindingBounds bs <> t
+  caseTermBounds (CaseTerm bs t) = bs <> t
 
   bindingBounds (v, t) = v:t

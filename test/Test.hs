@@ -66,8 +66,7 @@ typeChecker = testGroup "type checker"
 
 dataTypes :: TestTree
 dataTypes = testGroup "data types"
-  [ testCase "duplicate constructors are disallowed" test_dupConstructorsDisallowed
-  , testCase "a constructor with a return type that is not the datatype is disallowed" test_constructorNotReturnDataDisallowed
+  [ testCase "a constructor with a return type that is not the datatype is disallowed" test_constructorNotReturnDataDisallowed
   , testCase "a constructor can't access the type variables defined in the data type declaration" test_constructorReferenceVarInData
   , testCase "a constructor can't access variables defined in another constructor" test_constructorReferenceVarInOtherConstructor
   , testCase "partiallyApplyCtor properly converts Zero" test_partiallyApplyCtorZero
