@@ -20,10 +20,6 @@ wellTyped ctx = succeeded ctx . typeCheck
 typeCheck :: Term -> TC Type
 typeCheck = fmap extract . typeCheck'
 
---TODO: rework errors completely
-typeError :: TC a
-typeError = throwError (TypeError [])
-
 typeCheck' :: Term -> TC (Cofree TermF Type)
 typeCheck' (Var v) = (:<) <$> fromCtx v <*> pure (VarF v)
 typeCheck' (Ctor c args) = do
@@ -38,7 +34,7 @@ typeCheck' (Lam (x, xTy) body) = do
       bodyAnn <- extendCtx (x, xTy) (typeCheck' body)
       bodyAnn' <- whnf (extract bodyAnn)
       pure $ Pi (x, xTy) bodyAnn' :< LamF (x, xTyAnn) bodyAnn
-    _ -> typeError
+    t -> throwError (TEExpectedTy t)
 typeCheck' (Pi (x, xTy) ret) = do
   xTyAnn <- typeCheck' xTy
   whnf (extract xTyAnn) >>= \case
@@ -46,8 +42,8 @@ typeCheck' (Pi (x, xTy) ret) = do
       retAnn <- extendCtx (x, xTy) (typeCheck' ret)
       whnf (extract retAnn) >>= \case
         Ty m -> pure $ Ty (max n m) :< PiF (x, xTyAnn) retAnn
-        _ -> typeError
-    _ -> typeError
+        t -> throwError (TEExpectedTy t)
+    t -> throwError (TEExpectedTy t)
 typeCheck' (App a b) = do
   aAnn <- typeCheck' a
   whnf (extract aAnn) >>= \case
@@ -56,14 +52,14 @@ typeCheck' (App a b) = do
       betaEq (extract bAnn) xTy
       ret' <- whnf (subst x b ret)
       pure $ ret' :< AppF aAnn bAnn
-    _ -> typeError
+    t -> throwError (TEExpectedPi t)
 typeCheck' (Ty n) = pure $ Ty (n+1) :< TyF n
 typeCheck' (Case expr motive cases) = do
   exprAnn <- typeCheck' expr
   motiveAnn <- typeCheck' motive
   whnf (extract motiveAnn) >>= \case
     Pi _ _ -> pure ()
-    _ -> typeError
+    t -> throwError (TEExpectedPi t)
   dataname <- appData (extract exprAnn)
   datatype@(DataDecl name ty ctors) <- lookupData dataname
   casesAnn <- perfectMerge ctors cases undefined undefined tcCase
@@ -71,10 +67,10 @@ typeCheck' (Case expr motive cases) = do
   pure (retTy :< CaseF exprAnn motiveAnn casesAnn)
     where
       tcCase :: Constructor -> Type -> CaseTerm -> TC (CaseTermF (Cofree TermF Type))
-      tcCase ctor args (CaseTerm bs e) = do
+      tcCase ctor args t@(CaseTerm bs e) = do
         argTys <- extractArgs args
         --TODO: perfectZipWith
-        when (length argTys /= length bs) (error "args not length bs")
+        when (length argTys /= length bs) (throwError (TECaseWrongNumCtorArgs argTys t))
         extendCtxs (zip bs argTys) $ do
           eTy <- typeCheck' e
           eTy' <- whnf (extract eTy)
@@ -93,12 +89,11 @@ typeCheck' (Case expr motive cases) = do
 
 --TODO: rewrite this in terms of extractArgs
 tcArgList (Pi (x, xTy) ret) (yTy:bs) = do
-  --TODO: better type errors
   yTy `hasType` xTy
   extendCtx (x,xTy) $ tcArgList ret bs
 tcArgList ty [] = do
   return ty
-tcArgList _ _ = throwError $ TypeError [PS "Couldn't match case term with constructor type"]
+tcArgList t args = throwError $ TECtorWrongNumArgs t args
 
 typeCheckTopLevel :: TopLevel -> TC Context
 typeCheckTopLevel (TLData d) = typeCheckData d
@@ -132,51 +127,48 @@ dataTypeReturn = whnf >=> returnTy >=> whnf >=> appData
 
 returnsData name = dataTypeReturn >=> \n -> case (n == name) of
   True -> success
-  False -> throwError $ TypeError [PS "Expected type constructor", PN name, PS ", got type constructor" , PN n]
+  False -> throwError $ TEDataReturnsWrong n name
 
 returnTy (Pi (_,_) ret) = whnf ret >>= returnTy
 returnTy t = return t
 
 appData (App a b) = whnf a >>= appData
 appData (Var retName) = return retName
-appData _ = throwError $ TypeError [PS "AppData not applied to a type constructed from a type constructor"]
+appData _ = throwError $ TEAppDataError
 
 -- | Check that a given name does not already occur in the context.
 nameNotDefined :: MonadError TypeError m => Context -> Name -> m ()
 nameNotDefined ctx n = do
   case lookupCtx n ctx of
     Nothing -> success
-    Just _ -> throwError $ TypeError [PS "The name", PN n, PS "is already defined"]
+    Just _ -> throwError $ TENameAlreadyDefined
 
 -- | Check that a given term has the given type.
 hasType :: Term -> Type -> TC ()
 hasType t target = do
   ctx <- ask
   tTy <- typeCheck t
-  extendTypeError (target `betaEq` tTy)
-    [PS "while checking if", PT t, PS "has type", PT tTy
-    ,PS "in the context", PC ctx]
+  catchError (target `betaEq` tTy)
+    (\err -> throwError (TEDoesntHaveType t target err))
 
 fromCtx v = do
   ctx <- ask
   case lookupCtx v ctx of
-    Nothing -> throwError $ TypeError [PS "Could not find", PN v, PS "in context."]
+    Nothing -> throwError $ TENotInContext v ctx
     Just ty -> return ty
 
 -- | Returns the term's type if the given term is not a type; throws
 -- an error otherwise.
 notType t =
   typeCheck t >>= \case
-    (Ty n) -> throwError $ TypeError
-      [PS "Expected something not a type, got", PT t, PS ":", PT (Ty n)]
+    (Ty n) -> throwError (TEUnexpectedType t)
     ty -> return ty
 
 -- | Returns () if the given term is a type; throws an error otherwise.
 isType t = do
   typeCheck t >>= \case
     (Ty n) -> return ()
-    term -> throwError $ TypeError
-      [PS "Expected a type, got", PT t, PS ":", PT term]
+    term -> throwError (TEExpectedTy term)
 
 -- | Type-check a term and insert it into the context.
 checkAndInsert :: Name -> Term -> TC Context

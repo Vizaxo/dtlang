@@ -177,14 +177,16 @@ goodBadCtxData = DataDecl
 -- context, and doesn't contain anything that shouldn't be.
 test_contextProperlyFilledData :: Assertion
 test_contextProperlyFilledData
-  = assertEqual "Incorrect context returned" expectedCtx returnedCtx
+  = assertEqual "Incorrect context returned" expectedCtx =<< getReturnedCtx
   where
-    returnedCtx = runTC emptyCtx $ typeCheckData goodBadCtxData
+    getReturnedCtx = case runTC emptyCtx $ typeCheckData goodBadCtxData of
+      Right ctx -> return ctx
+      Left err -> assertFailure ("Type error: " <> show err)
     expectedCtx =
-      Right (Context {getCtx = [(Specified "Good1",Pi (Specified
-      "bad3",Ty 0) (Pi (Specified "bad4",Pi (Specified "bad5",Var
-      (Specified "bad3")) (Ty 0)) (Pi (Specified "bad6",Var (Specified
-      "bad3")) (Pi (Specified "bad7",App (Var (Specified "bad4")) (Var
+      (Context {getCtx = [(Specified "Good1",Pi (Specified "bad3",Ty
+      0) (Pi (Specified "bad4",Pi (Specified "bad5",Var (Specified
+      "bad3")) (Ty 0)) (Pi (Specified "bad6",Var (Specified "bad3"))
+      (Pi (Specified "bad7",App (Var (Specified "bad4")) (Var
       (Specified "bad6"))) (App (App (Var (Specified "Good0")) (Var
       (Specified "bad3"))) (Var (Specified "bad4"))))))),(Specified
       "Good0",Pi (Specified "bad0",Ty 0) (Pi (Specified "bad1",Pi

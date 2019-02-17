@@ -77,7 +77,7 @@ nat = DataDecl
   (Ty 0)
   (fromList [(Specified "Zero", Var (Specified "Nat"))
             ,(Specified "Succ",
-              Pi (Specified "x",Var (Specified "Nat"))
+              Pi (Specified "n",Var (Specified "Nat"))
               (Var (Specified "Nat")))])
 
 natId :: Term
