@@ -18,7 +18,8 @@ type MonadTypeCheck m = (MonadReader Context m, MonadState GenVar m, MonadError 
 type TC = ReaderT Context (StateT GenVar (Except TypeError))
 
 data TypeError
-  = TENotBetaEqual Term Term
+  = TEErrorWhenChecking Term TypeError
+  | TENotBetaEqual Term Term
   | TENoConstructor Name Context
   | TEExpectedTy Term
   | TEExpectedPi Term
@@ -38,6 +39,9 @@ data TypeError
   | TENotBetaEq Term Term
   | TEWhnfUnmatchedCase Name Term
   deriving Show
+
+extendError :: MonadTypeCheck m => (TypeError -> TypeError) -> m a -> m a
+extendError f ma = catchError ma (throwError . f)
 
 -- The context can be extended with a new binding.
 
