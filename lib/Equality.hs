@@ -123,6 +123,7 @@ whnf t@(Case e m terms) = do
         Just (CaseTerm bs body) -> whnf $ substBindings (zip bs args) body
     t -> return (Case t m' terms)
 whnf (Var v) = partiallyApplyCtor v
+whnf (TFix t) = whnf (App t (TFix t))
 whnf t = return t
 
 -- Substitute a list of bindings into an expression.
@@ -134,7 +135,7 @@ substBindings xs body = foldr (\(v,val) term -> subst v val term) body xs
 partiallyApplyCtor :: MonadReader Context m => Name -> m Term
 partiallyApplyCtor v = do
   lookupEnv v <$> ask >>= \case
-    Just t -> pure $ Var v
+    Just t -> pure t
     Nothing ->
       fromRight (Var v) <$> runExceptT (partiallyApplyCtor' [] <$> lookupCtor v)
   where

@@ -87,6 +87,13 @@ typeCheck' t = extendError (TEErrorWhenChecking t) (tc t) where
             ret' <- extendCtx (x, xTy') (extract ret)
             pure (xTy':ret')
           alg _ = pure []
+  tc (TFix t) = do
+    tAnn <- tc t
+    whnf (extract tAnn) >>= \case
+      Pi (x, a) b -> do
+        betaEq a b
+        pure (a :< TFixF tAnn)
+      _ -> throwError (TEExpectedPi t)
 
 --TODO: rewrite this in terms of extractArgs
 tcArgList (Pi (x, xTy) ret) (yTy:bs) = do

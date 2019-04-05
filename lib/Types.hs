@@ -70,6 +70,7 @@ data Term
   | App Term Term              -- ^Application
   | Ty Natural                 -- ^Type universes
   | Case Term Type (Map Constructor CaseTerm)  -- ^Case expr, at type, of terms
+  | TFix Term                  -- ^Fixed-point combinator
   deriving (Eq, Show)
 makeBaseFunctor ''Term
 

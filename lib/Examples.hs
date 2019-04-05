@@ -13,6 +13,7 @@ defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
   checkAndInsert (Specified "fst") fst' `bindCtx`
   checkAndInsert (Specified "snd") snd' `bindCtx`
   checkAndInsert (Specified "pair") pair `bindCtx`
+  checkAndInsert (Specified "fix") tfix `bindCtx`
   typeCheckData nat `bindCtx`
   typeCheckData list `bindCtx`
   typeCheckData vect `bindCtx`
@@ -23,6 +24,9 @@ defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
     infixl 5 `bindCtx`
     bindCtx :: TC Context -> TC a -> TC a
     bindCtx ctxM m = ctxM >>= \ctx -> local (const ctx) m
+
+tfix :: Term
+tfix = Lam (var "A", Ty 0) $ Lam (var "f", (Pi (var "ignored", v "A") (v "A"))) $ TFix (v "f")
 
 -- | id : (t:(Ty 0)) -> t -> t
 --   id = \t. \a. a
@@ -179,7 +183,7 @@ sigma = DataDecl
 plus :: Definition
 plus = Definition (Specified "plus") (Pi (var "n", natT) $ Pi (var "m", natT) $ natT)
   (Lam (var "n", natT) $ Lam (var "m", natT) $
-   Case (v "n") (v "Nat") $
+   Case (v "n") (Lam (var "ignored", natT) natT) $
    fromList [ (var "Zero", CaseTerm  [] (v "m"))
             , (var "Succ", CaseTerm  [var "n'"] (v "plus" `App` v "n" `App` v "m"))
             ])
@@ -188,7 +192,7 @@ plusTerm :: Term
 plusTerm = (Lam (var "n", natT) $ Lam (var "m", natT) $
    Case (v "n") (v "Nat") $
    fromList [ (var "Zero", CaseTerm  [] (v "m"))
-            , (var "Succ", CaseTerm  [var "n'"] (v "plus" `App` v "n" `App` v "m"))
+            , (var "Succ", CaseTerm  [var "n"] (v "plus" `App` v "n" `App` v "m"))
             ])
 
 k :: Term
@@ -196,3 +200,25 @@ k = Lam (var "a", natT) (Lam (var "b", natT) (v "a"))
 
 closureTest :: Term
 closureTest = k `App` (succ' zero) `App` zero
+
+add :: Term
+add = Lam (var "x", natT) $ TFix $ Lam (var "f", (Pi (var "x", natT) natT)) $ Lam (var "y", natT) $
+  Case (v "y") (Lam (var "ignored",natT) natT) $
+  fromList [ (var "Zero", CaseTerm [] (v "x"))
+           , (var "Succ", CaseTerm [var "y'"] (succ' (v "f" `App` v "y'")))]
+
+add' :: Term
+add' = Lam (var "f", Pi (var "x", natT) natT) $ Lam (var "y", natT) $
+  Case (v "y") (Lam (var "ignored",natT) natT) $
+  fromList [ (var "Zero", CaseTerm [] (v "Zero"))
+           -- , (var "Succ", CaseTerm [var "y'"] (succ' (v "f" `App` v "y'")))]
+           , (var "Succ", CaseTerm [var "y'"] (v "Zero"))]
+
+{-
+fac :: Term
+fac = TFix $ Lam (var "f", (Pi (var "x", natT) natT)) $ Lam (var "x", natT) $
+  Case (v "x") (v "Nat") $
+  fromList [ (var "Zero", CaseTerm [] (succ' zero))
+           , (var "Succ", CaseTerm [var "n"] (mul `App` (succ' (v "n")) `App` (v "f" `App` v "x")))
+           ]
+-}
