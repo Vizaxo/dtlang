@@ -8,13 +8,15 @@ import qualified Types as T
 import Utils
 
 import Prelude hiding (pi)
-import Data.Text hiding (map, length)
+import Data.Bifunctor
+import Data.Text hiding (map, length, reverse, unsnoc, foldl1)
 import Text.Parsec hiding ((<|>), ParseError)
 import qualified Text.Parsec as Parsec
 
 data LexerParserError
   = ErrLex Parsec.ParseError
   | ErrParse ParseError
+  | ErrNothingToParse
   deriving Show
 
 data ParseError
@@ -57,7 +59,7 @@ pi t = Left $ PEPi t
 
 app :: TokenTree -> Either ParseError Term
 --TODO: consider multiple (uncurried) arguments
-app (SexpTree [f,x]) = App <$> term f <*> term x
+app (SexpTree (x:xs)) = foldl1 App <$> (mapM term (x:xs))
 app t = Left $ PEApp t
 
 typeUniv :: TokenTree -> Either ParseError Term
@@ -131,3 +133,17 @@ replParser s = toReplExpr $ parse (sexpTree <* eof) "" =<< parse lexer "" s
     toReplExpr :: Either Parsec.ParseError TokenTree -> Either LexerParserError ReplExpr
     toReplExpr (Left e) = Left (ErrLex e)
     toReplExpr (Right t) = either (Left . ErrParse) Right (replTopLevel t)
+
+unsnoc :: [a] -> Maybe ([a], a)
+unsnoc (reverse -> (x:xs)) = Just (reverse xs, x)
+unsnoc _ = Nothing
+
+parseFile :: Text -> Either LexerParserError ([TopLevel], Term)
+parseFile t = f =<< first ErrLex (parse (many sexpTree) "" =<< parse lexer "" t)
+  where
+    f xs = case (unsnoc xs) of
+      Nothing -> Left ErrNothingToParse
+      Just (topLevels, t) -> do
+        tls <- first ErrParse (sequence (topLevel <$> topLevels))
+        t' <- first ErrParse (term t)
+        pure (tls, t')

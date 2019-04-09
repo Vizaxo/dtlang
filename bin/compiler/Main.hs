@@ -2,6 +2,7 @@ module Main where
 
 import Control.Comonad
 import qualified Data.Text as T
+import Data.Foldable
 import System.Directory
 import System.Environment
 import System.Exit
@@ -19,10 +20,12 @@ main :: IO ()
 main = getArgs >>= \case
   [srcfile, "-o", outfile] -> do
     src <- readFile srcfile
-    ctx <- handleErrM defaultCtx $
+    defCtx <- handleErrM defaultCtx $
       \e -> putStrLn "Error type checking default context:" >> print e >> exitFailure
-    term <- handleErrM (parseTerm (T.pack src)) $
+    (topLevels, term) <- handleErrM (parseFile (T.pack src)) $
       \e -> putStrLn "Error parsing file:" >> print e >> exitFailure
+    ctx <- handleErrM (foldlM (\ctx tl -> runTC ctx (typeCheckTopLevel tl)) defCtx topLevels)
+      (\e -> putStrLn "Type error: " >> print e >> exitFailure)
     termAnn <- case runTC ctx (typeCheck' term) of
       Left e ->
         putStrLn "Error type checking term:" >> print e >> exitFailure

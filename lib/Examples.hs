@@ -9,17 +9,17 @@ import Data.Map (singleton, fromList, empty)
 
 defaultCtx :: Either TypeError Context
 defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
-  checkAndInsert (Specified "id") id' `bindCtx`
-  checkAndInsert (Specified "fst") fst' `bindCtx`
-  checkAndInsert (Specified "snd") snd' `bindCtx`
-  checkAndInsert (Specified "pair") pair `bindCtx`
-  checkAndInsert (Specified "fix") tfix `bindCtx`
-  typeCheckData nat `bindCtx`
-  typeCheckData list `bindCtx`
-  typeCheckData vect `bindCtx`
-  typeCheckData void `bindCtx`
-  typeCheckData unit `bindCtx`
-  typeCheckData sigma
+  --checkAndInsert (Specified "id") id' `bindCtx`
+  --checkAndInsert (Specified "fst") fst' `bindCtx`
+  --checkAndInsert (Specified "snd") snd' `bindCtx`
+  --checkAndInsert (Specified "pair") pair `bindCtx`
+  checkAndInsert (Specified "fix") tfix
+  --typeCheckData nat `bindCtx`
+  --typeCheckData list `bindCtx`
+  --typeCheckData vect `bindCtx`
+  --typeCheckData void `bindCtx`
+  --typeCheckData unit `bindCtx`
+  --typeCheckData sigma
   where
     infixl 5 `bindCtx`
     bindCtx :: TC Context -> TC a -> TC a
