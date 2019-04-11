@@ -4,8 +4,11 @@ import Test.Generators
 
 import Equality
 import Examples
+import TC
 import TypeCheck
 import Types
+
+import Control.Monad.Except
 
 -- | Make sure that the arbitrary instance for WellTyped generates well-typed terms.
 prop_genWellTyped :: Context -> WellTyped -> Bool
@@ -16,8 +19,8 @@ prop_typeOfIsWellTyped ctx (WellTyped term) = succeeded ctx $ do
   ty <- typeCheck term
   ty' <- typeCheck ty
   whnf ty' >>= \case
-    Ty n -> return True
-    _ -> return False
+    Ty n -> success
+    t -> throwError (TEExpectedTy t)
 
 -- | Applying a term to id (specialised to the term's type) should have no
 --   effect on the type.
