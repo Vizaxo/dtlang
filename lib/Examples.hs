@@ -7,23 +7,27 @@ import TypeCheck
 import Control.Monad.Reader hiding (void)
 import Data.Map (singleton, fromList, empty)
 
+testingCtx :: Either TypeError Context
+testingCtx = getCtxTC emptyCtx $ ask `bindCtx`
+  checkAndInsert (Specified "id") id' `bindCtx`
+  checkAndInsert (Specified "fst") fst' `bindCtx`
+  checkAndInsert (Specified "snd") snd' `bindCtx`
+  checkAndInsert (Specified "pair") pair `bindCtx`
+  checkAndInsert (Specified "fix") tfix `bindCtx`
+  typeCheckData nat `bindCtx`
+  typeCheckData list `bindCtx`
+  typeCheckData vect `bindCtx`
+  typeCheckData void `bindCtx`
+  typeCheckData unit `bindCtx`
+  typeCheckData sigma
+
 defaultCtx :: Either TypeError Context
 defaultCtx = getCtxTC emptyCtx $ ask `bindCtx`
-  --checkAndInsert (Specified "id") id' `bindCtx`
-  --checkAndInsert (Specified "fst") fst' `bindCtx`
-  --checkAndInsert (Specified "snd") snd' `bindCtx`
-  --checkAndInsert (Specified "pair") pair `bindCtx`
   checkAndInsert (Specified "fix") tfix
-  --typeCheckData nat `bindCtx`
-  --typeCheckData list `bindCtx`
-  --typeCheckData vect `bindCtx`
-  --typeCheckData void `bindCtx`
-  --typeCheckData unit `bindCtx`
-  --typeCheckData sigma
-  where
-    infixl 5 `bindCtx`
-    bindCtx :: TC Context -> TC a -> TC a
-    bindCtx ctxM m = ctxM >>= \ctx -> local (const ctx) m
+
+infixl 5 `bindCtx`
+bindCtx :: TC Context -> TC a -> TC a
+bindCtx ctxM m = ctxM >>= \ctx -> local (const ctx) m
 
 tfix :: Term
 tfix = Lam (var "A", Ty 0) $ Lam (var "f", (Pi (var "ignored", v "A") (v "A"))) $ TFix (v "f")

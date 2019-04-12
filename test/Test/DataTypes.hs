@@ -73,33 +73,33 @@ badVarReferenceOtherCtorRev =
        (Var (Specified "Vect")) `App` (Var (Specified "a")) `App` (Var (Specified "Zero")))])
 
 test_constructorReferenceVarInOtherConstructor
-  = do assertLeft $ defaultCtx >>= flip runTC
+  = do assertLeft $ testingCtx >>= flip runTC
          (typeCheckData badVarReferenceOtherCtor)
-       assertLeft $ defaultCtx >>= flip runTC
+       assertLeft $ testingCtx >>= flip runTC
          (typeCheckData badVarReferenceOtherCtorRev)
 
 
 test_partiallyApplyCtorZero
   = assertRightAlphaEq
-      (defaultCtx >>= flip runTC (partiallyApplyCtor (var "Zero")))
+      (testingCtx >>= flip runTC (partiallyApplyCtor (var "Zero")))
       (Ctor (Specified "Zero") [])
 
 test_partiallyApplyCtorSucc
   = assertRightAlphaEq
-      (defaultCtx >>= flip runTC ((partiallyApplyCtor (var "Succ"))))
+      (testingCtx >>= flip runTC ((partiallyApplyCtor (var "Succ"))))
       (Lam (Specified "n", Var (Specified "Nat")) (Ctor (Specified "Succ") [Var (Specified "n")]))
 
 test_patternMatchNatTypeCheck
-  = assertRight $ defaultCtx >>= flip runTC (typeCheck patternMatchNat)
+  = assertRight $ testingCtx >>= flip runTC (typeCheck patternMatchNat)
 
 test_patternMatchNatWhnfZero
   = assertRightAlphaEq
-      (defaultCtx >>= flip runTC (whnf (patternMatchNat `App` zero)))
+      (testingCtx >>= flip runTC (whnf (patternMatchNat `App` zero)))
       (succ' zero)
 
 test_patternMatchNatWhnfOne
   = assertRightAlphaEq
-      (defaultCtx >>= flip runTC (whnf (patternMatchNat `App` (succ' zero))))
+      (testingCtx >>= flip runTC (whnf (patternMatchNat `App` (succ' zero))))
       zero
 
 

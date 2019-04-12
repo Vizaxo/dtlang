@@ -23,7 +23,7 @@ defaultCtx' :: Context
 defaultCtx' = either
   (\e -> error ("Type checking default context failed: " <> show e))
   id
-  defaultCtx
+  testingCtx
 
 --TODO: make benchmarking suite
 genBenchmark :: IO ()
