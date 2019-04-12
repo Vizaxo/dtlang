@@ -1,9 +1,0 @@
-{-
-The lambda is the polymorphic identity function. Applying it to Nat
-(the type we are using), and to Succ Zero, we will be returned Succ
-Zero.
--}
-
-(((lambda (A (Type 0)) (lambda (x A) x))
-  Nat)
- (Succ Zero))
