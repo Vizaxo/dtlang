@@ -1,0 +1,53 @@
+{- Booleans -}
+(data Bool (Type 0)
+      (false Bool)
+      (true Bool))
+
+{- Natural numbers -}
+(data Nat (Type 0)
+      (zero Nat)
+      (succ (Pi (n Nat) Nat)))
+
+(define one Nat (succ zero))
+(define two Nat (succ (succ zero)))
+(define three Nat (succ (succ (succ zero))))
+
+(define iszero
+  (Pi (n Nat) Bool)
+  (lambda (n Nat) (case n (lambda (n Nat) Bool)
+                   ((zero) true)
+                   ((succ x) false))))
+
+{- Identity function -}
+(define id
+  (Pi (A (Type 0)) (Pi (x A) A))
+  (lambda (A (Type 0)) (lambda (x A) x)))
+
+{- Addition of natural numbers -}
+(define plus
+  (Pi (x Nat) (Pi (y Nat) Nat))
+  (lambda (x Nat)
+    (fix (Pi (foo Nat) Nat)
+         (lambda (f (Pi (z Nat) Nat))
+           (lambda (y Nat)
+             (case y (lambda (z Nat) Nat)
+                   ((zero) x)
+                   ((succ n) (succ (f n)))))))))
+
+
+{- Vectors -}
+(data Vect (Pi (n Nat) (Pi (A (Type 0)) (Type 0)))
+      (Nil (Pi (A (Type 0)) (Vect zero A)))
+      (Cons (Pi (A (Type 0)) (Pi (n Nat) (Pi (x A) (Pi (xs (Vect n A)) (Vect (succ n) A)))))))
+
+(define nilvec (Vect zero Nat) (Nil Nat))
+
+(define twovec
+  (Vect (succ (succ zero)) Bool)
+  (Cons Bool (succ zero) false
+        (Cons Bool zero true
+              (Nil Bool))))
+
+
+{- The final term will be evaluated -}
+(iszero zero)
