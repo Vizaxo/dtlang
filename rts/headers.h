@@ -39,7 +39,6 @@ int deallocated = 0;
 
 void* my_malloc(size_t size) {
 	alloc_info* addr = malloc(sizeof(alloc_info) + size);
-	printf("my_malloc at %p\n", addr);
 	allocated++;
 	if (addr == NULL) {
 		//die("Memory allocation failed!");
@@ -56,7 +55,6 @@ void mark(heap_data* user_addr) {
 	if (user_addr != NULL) {
 		alloc_info* addr = ((alloc_info*)user_addr)-1;
 		if (addr != NULL) {
-			printf("Marking at %p\n", addr);
 			addr->marked = 1;
 		}
 	}
@@ -65,18 +63,9 @@ void mark(heap_data* user_addr) {
 heap_data* heap_alloc(size_t mem_count) {
 	run_gc();
 	heap_data* data = my_malloc(sizeof(heap_data) + sizeof(alloc_info));
-	printf("Alloc at %p\n", ((alloc_info*)data)-1);
-	/*
-	if (mem_count == 0) {
-		data->mem = NULL;
-
-	} else {
-	*/
-		heap_data** arr = my_malloc(sizeof(heap_data*) * (mem_count+1));
-		data->mem = arr;
-		data->mem[mem_count] = NULL;
-		//}
-
+	heap_data** arr = my_malloc(sizeof(heap_data*) * (mem_count+1));
+	data->mem = arr;
+	data->mem[mem_count] = NULL;
 	return data;
 }
 
@@ -190,7 +179,6 @@ void sweep() {
 void mark_from_roots() {
 	heap_ptr* curr = &root_ptr;
 	while(curr != NULL) {
-		printf("Found root node: %p\n", curr);
 		if (curr->ptr != NULL) {
 			mark(*(curr->ptr));
 			mark_heap(*(curr->ptr));
