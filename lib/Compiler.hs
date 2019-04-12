@@ -16,8 +16,9 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.Tuple
 
-import Types
 import TC
+import Types
+import TypeCheck
 import Utils
 
 
@@ -52,6 +53,7 @@ eraseTypes = cata alg where
   alg (_ :< AppF a b) = EApp a b
   alg (_ :< TyF n) = EErasedType
   alg (_ :< CaseF e _ terms) =  ECase e (eraseTypesCase <$> assocs terms)
+  alg (_ :< TFixF t) =  EErasedType --TODO: FIX THIS
 
   eraseTypesCase (ctor, (CaseTerm bindings e))
     = ECaseTermF ctor bindings e
@@ -85,7 +87,7 @@ data LamLiftedTerm
   = LLVar Name
   | LLEnvRef Int
   | LLCtor Constructor [LamLiftedTerm]
-  | LLMkClosure FunctionName [Name]
+  | LLMkClosure FunctionName [LamLiftedTerm]
   | LLApp LamLiftedTerm LamLiftedTerm
   | LLCase LamLiftedTerm [ErasedCaseTermF LamLiftedTerm]
   | LLErasedType
@@ -98,7 +100,7 @@ freeVarsLL = cata alg where
   alg (LLVarF v) = [v]
   alg (LLEnvRefF i) = []
   alg (LLCtorF c args) = concat args
-  alg (LLMkClosureF f frees) = frees
+  alg (LLMkClosureF f frees) = concat frees
   alg (LLAppF f xs) = f ++ xs
   alg (LLCaseF e terms) = e ++ (concatMap freeVarsCaseTermE terms)
   alg LLErasedTypeF = []
@@ -142,7 +144,7 @@ lambdaLift = fmap (uncurry TermAndFunctions) . runWriterT . cataM alg where
     name <- freshFnName "lambda"
     let frees = freeVarsLL body \\ [arg]
     tell [Function name arg frees (mkEnvRefs frees body)]
-    return (LLMkClosure name frees)
+    return (LLMkClosure name (LLVar <$> frees))
   alg (EAppF f x) = pure (LLApp f x)
   alg (ECaseF e terms) = pure (LLCase e terms)
   alg EErasedTypeF = pure LLErasedType
@@ -163,7 +165,7 @@ data TaggedDataTerm
   | TDEnvRef Int
   | TDUnit
   | TDTaggedUnionExpr Tag [TaggedDataTerm]
-  | TDMkClosure FunctionName [Name]
+  | TDMkClosure FunctionName [TaggedDataTerm]
   | TDApp TaggedDataTerm TaggedDataTerm
   | TDCase TaggedDataTerm (Map Tag ([Name], TaggedDataTerm))
   | TDLet [(Name, TaggedDataTerm)] TaggedDataTerm
@@ -272,8 +274,9 @@ toHLA = mapM (fmap swap . cataM alg) where
     let s = [ HLASDeclareHeapAlloc cl (length env)
             , HLASAssign (HLAAStructMember cl "data.f") (HLAEFuncVar f)
             ]
-          <> ((\(v, i) -> HLASAssign (HLAAMemIndex cl i) (HLAEVar v))
-              <$> zip env [0..])
+          <> (snd <$> env)
+          <> ((\(t, i) -> HLASAssign (HLAAMemIndex cl i) t)
+              <$> zip (fst <$> env) [0..])
     pure (HLAEVar cl, HLASBlock s)
   alg (TDAppF (f,s) (arg,s')) = pure (HLAEApp f arg, s <> s')
   alg (TDCaseF (scrutinee, s) cases) = do
@@ -307,15 +310,15 @@ toHLA = mapM (fmap swap . cataM alg) where
       <$> zip bindings [0..]
 
 
-toC :: MonadState GenVar m => HighLevelAsm -> m String
-toC (TermAndFunctions t fs)
+toC :: MonadState GenVar m => [([String], String, String)] -> HighLevelAsm -> m String
+toC localDefs (TermAndFunctions t fs)
   = do
   programStmt <- mkProgram <$> toCStmt (fst t)
   let mainStmt = mkMain
   funs <- mapM mkCFunction fs
   pure $ "#include \"rts/headers.h\"\n"
-    <> "\n" <> decls
-    <> "\n" <> intercalate "\n" (programStmt : mainStmt : funs)
+    <> "\n" <> decls <> concat (localDefs^..each._3)
+    <> "\n" <> intercalate "\n" ((concat (localDefs^..each._1) <> funs) <> [programStmt, mainStmt])
   where
     decls = concatMap declareCFunction fs
 
@@ -326,9 +329,18 @@ toC (TermAndFunctions t fs)
 
     mkProgram s
       = cFunction "program" "void" [] $
-      s <> "printf(\"%d\\n\", (" <> toCExpr (snd t) <> ")->data.tag);\n"
+      (intercalate "\n" (localDefs^..each._2)) <> s <> "printf(\"%d\\n\", (" <> toCExpr (snd t) <> ")->data.tag);\n"
 
     headers = intercalate "\n" $ ("#include " <>) <$> ["<stdio.h>", "<stdlib.h>"]
+
+toCLocalDef :: MonadState GenVar m => Name -> HighLevelAsm -> m ([String], String, String)
+toCLocalDef name (TermAndFunctions (stmts, expr) fs) = do
+  funs <- mapM mkCFunction fs
+  assign <- mkAssign <$> toCStmt stmts
+  pure (funs, assign, declare)
+  where
+    declare = "heap_data* " <> toCName name <> ";\n"
+    mkAssign s = s <> toCName name <> " = " <> toCExpr expr <> ";\n"
 
 mkCFunction :: MonadState GenVar m => Function (HighLevelAsmStmt, HighLevelAsmExpr) -> m String
 mkCFunction (Function name arg _ (body, ret))
@@ -444,11 +456,28 @@ mkClosureCallFn
 
 
 data CompilerError
-  = CTDError TaggedDataError
+  = CETaggedData TaggedDataError
+  | CEContextTypeError Context TypeError
   deriving Show
 
 compileToC :: MonadError CompilerError m => Context -> Cofree TermF Type -> m String
-compileToC ctx = flip evalStateT (GenVar 0) . flip runReaderT ctx
-  . (toC <=< toHLA <=< (withError CTDError . toTaggedData)
-     <=< lambdaLift <=< partiallyApplyCtors)
-  . eraseTypes
+compileToC ctx t = flip evalStateT (GenVar 0) $ do
+  localDefs <- compileContext ctx
+  flip runReaderT ctx
+    . (toC localDefs <=< toHLA <=< (withError CETaggedData . toTaggedData)
+       <=< lambdaLift <=< partiallyApplyCtors)
+    . eraseTypes $ t
+
+compileContext :: (MonadState GenVar m, MonadError CompilerError m)
+  => Context -> m [([String], String, String)]
+compileContext ctx@(Context _ env _) = mapM (compileLocalDef ctx) env
+
+compileLocalDef :: (MonadState GenVar m, MonadError CompilerError m) => Context -> (Name, Term) -> m ([String], String, String)
+compileLocalDef ctx (name, term) = do
+  termAnn <- case runTC ctx (typeCheck' term) of
+    Left e -> throwError (CEContextTypeError ctx e)
+    Right x -> pure x
+  flip runReaderT ctx
+    . (toCLocalDef name <=< toHLA <=< (withError CETaggedData . toTaggedData)
+       <=< lambdaLift <=< partiallyApplyCtors)
+    . eraseTypes $ termAnn
